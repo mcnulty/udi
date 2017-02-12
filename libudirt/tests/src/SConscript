@@ -8,13 +8,13 @@ Import('topenv')
 
 bin_env = topenv.Clone()
 
-bin_env.Append(CPPPATH = ['#/libudirt', '#/libudicommon', '#/tests/libuditest'])
+bin_env.Append(CPPPATH = ['#/src', '#/libudicommon', '#/tests/libuditest'])
 
 sources = bin_env.Glob('*.cxx', strings=True, source=True)
 
 libs = ['udirt', 'uditest', 'uditestmain']
 
-libpath = ['#/build/libudirt', '#/build/tests/libuditest']
+libpath = ['#/build/src', '#/build/tests/libuditest']
 
 bins = dict()
 

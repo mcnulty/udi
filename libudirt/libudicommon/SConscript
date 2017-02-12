@@ -8,7 +8,7 @@ Import('topenv')
 
 lib_env = topenv.Clone()
 
-lib_env.Append(CPPPATH = ['#/libudirt'])
+lib_env.Append(CPPPATH = ['#/src'])
 
 sources = ['udi-common.c', 'udi-common-payload.c']
 

@@ -54,22 +54,13 @@ if udibuild.IsLinux():
     topenv.Append(CPPDEFINES=['LINUX'])
 
 # subdirectories
-topenv.SConscript('#/libudi/SConscript', variant_dir='#/build/libudi', duplicate=False)
 topenv.SConscript('#/libudicommon/SConscript', variant_dir='#/build/libudicommon', duplicate=False)
-topenv.SConscript('#/libudirt/SConscript', variant_dir='#/build/libudirt', duplicate=False)
-topenv.SConscript('#/tests/bin/SConscript', variant_dir='#/build/tests/bin', duplicate=False)
+topenv.SConscript('#/src/SConscript', variant_dir='#/build/src', duplicate=False)
 topenv.SConscript('#/tests/libuditest/SConscript', variant_dir='#/build/tests/libuditest', duplicate=False)
-topenv.SConscript('#/tests/udirt_tests/SConscript', variant_dir='#/build/tests/udirt_tests', duplicate=False)
-topenv.SConscript('#/tests/udi_tests/SConscript', variant_dir='#/build/tests/udi_tests', duplicate=False)
+topenv.SConscript('#/tests/src/SConscript', variant_dir='#/build/tests/src', duplicate=False)
 topenv.SConscript('#/util/SConscript', variant_dir='#/build/util', duplicate=False)
 
 # default target
-topenv.Default('libudi', 'libudirt', 'tests/udirt_tests', 'tests/udi_tests', 'util')
-
-# ctags generator
-ctags = topenv.Command('ctags', '', 'ctags -R libudirt libudi libudicommon tests')
-
-# cscope generator
-cscope = topenv.Command('cscope', '', 'cscope -b -R')
+topenv.Default('src', 'tests/src', 'util')
 
 # vim: ft=python
