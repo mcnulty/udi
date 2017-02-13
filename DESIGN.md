@@ -204,6 +204,7 @@ project.
 
 * libc
 * libudis86
+* libcbor
 * dynamic loading libraries (vary across platforms)
 
 ## libudi ##
