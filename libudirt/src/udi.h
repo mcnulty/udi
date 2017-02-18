@@ -16,27 +16,10 @@
 extern "C" {
 #endif
 
-// Definition of the userland debugger interface (UDI)
-
-// UDI types
-typedef uint64_t udi_address;
-typedef uint32_t udi_length;
+// UDI message metadata types
 typedef uint32_t udi_request_type;
 typedef uint32_t udi_response_type;
 typedef uint32_t udi_event_type;
-typedef uint32_t udi_data_type;
-
-/*
- * UDI data type
- */
-typedef enum {
-    UDI_DATATYPE_INT16 = 0,
-    UDI_DATATYPE_INT32,
-    UDI_DATATYPE_LENGTH,
-    UDI_DATATYPE_INT64,
-    UDI_DATATYPE_ADDRESS,
-    UDI_DATATYPE_BYTESTREAM // encoded as a length and a following byte stream
-} udi_data_type_e;
 
 /**
  * architecture of debuggee
@@ -142,13 +125,8 @@ typedef enum {
 
 } udi_register_e;
 
-/* 
- * Request specification:
- *
- * +------------------+------------+----------------+
- * | udi_request_type | udi_length | void *argument |
- * +------------------+------------+----------------+
- *
+/*
+ * Request types
  */
 typedef enum
 {
@@ -172,11 +150,7 @@ typedef enum
 } udi_request_type_e;
 
 /*
- * Response specification
- *
- * +-------------------+------------------+------------+---------------------+
- * | udi_response_type | udi_request_type | udi_length | void *packed_data   |
- * +-------------------+------------------+------------+---------------------+
+ * Response types
  */
 typedef enum
 {
@@ -185,185 +159,9 @@ typedef enum
     UDI_RESP_MAX
 } udi_response_type_e;
 
-/* Request-response payload definitions 
- * 
- * For all request-reponse pairs:
- *      if udi_response_type == ERROR:
- *              packed_data == error message (of type UDI_DATATYPE_BYTESTREAM)
+/*
+ * Event types
  */
-
-/* Init request and response
- *
- * Request arguments:
- *      None
- *
- * Response values:
- *      UDI_DATATYPE_INT32 - the UDI protocol version
- *      UDI_DATATYPE_INT32 - the architecture of the debuggee
- *      UDI_DATATYPE_INT32 - whether the debuggee is multi-thread capable
- *      UDI_DATATYPE_INT64 - the tid for the initial thread
- */
-
-/* Continue request and response
- *
- * It is an error to send this request to a thread pipe
- *
- * Request arguments:
- *      UDI_DATATYPE_INT32 - signal to pass to the debuggee (0 for no signal)
- *
- * Response values:
- *      None
- */
-
-/* Read memory request and response
- *
- * It is an error to send this request to a thread pipe
- *
- * Request arguments:
- *      UDI_DATATYPE_ADDRESS - virtual memory address to read from
- *      UDI_DATATYPE_LENGTH - # of bytes to read
- *
- * Response values:
- *      UDI_DATATYPE_BYTESTREAM - requested memory values of target process
- */
-
-/* Write memory request and response
- *
- * It is an error to send this request to a thread pipe
- *
- * Request arguments:
- *      UDI_DATATYPE_ADDRESS - virtual memory address to write to
- *      UDI_DATATYPE_BYTESTREAM - bytes to write into target process
- *
- * Response values:
- *      None
- */
-
-/* Read register request and response
- *
- * It is an error to send this request to a process pipe
- *
- * Request arguments:
- *      UDI_DATATYPE_INT32 - the id of the register to read (udi_register_e)
- *
- * Response values:
- *      UDI_DATATYPE_ADDRESS - the value stored in the register
- */
-
-/* Write register request and response
- *
- * It is an error to send this request to a process pipe
- *
- * Request arguments:
- *      UDI_DATATYPE_INT32 - the id of the register to write (udi_register_e)
- *      UID_DATATYPE_ADDRESS - the value to write to the register
- *
- * Response values:
- *      None
- */
-
-/* Breakpoint create request and response
- *
- * Request arguments:
- *      UDI_DATATYPE_ADDRESSS - virtual memory address to set the breakpoint
- *
- * Response values:
- *      None
- */
-
-/* Breakpoint install request and response
- * 
- * Request arguments:
- *      UDI_DATATYPE_ADDRESS - virtual memory address of the breakpoint to install
- *
- * Response values:
- *      None
- */
-
-/* Breakpoint delete request and response
- *
- * Request arguments:
- *      UDI_DATATYPE_ADDRESS - virtual memory address of the breakpoint to remove
- *
- * Response values:
- *      None
- */
-
-/* Breakpoint remove request and response
- *
- * Request arguments:
- *      UDI_DATATYPE_ADDRESS - virtual memory address of the breakpoint to disable
- *
- * Response values:
- *      None
- */
-
-/**
- * Thread suspend request and response
- *
- * It is an error to send this request to the process request pipe
- *
- * Request arguments:
- *      None
- *
- * Response values:
- *      None
- */
-
-/**
- * Thread resume request and response
- *
- * It is an error to send this request to the process request pipe
- *
- * Request arguments:
- *      None
- *
- * Response values:
- *      None
- */
-
-/**
- * Thread next instruction request and response
- *
- * It is an error to send this request to the process request pipe
- *
- * Request arguments:
- *      None
- *
- * Response values:
- *      UDI_DATATYPE_ADDRESS - the address of the next instruction to be executed
- */
-
-/**
- * Thread singlestep setting request and response
- *
- * It is an error to send this request to the process request pipe
- *
- * Request arguments:
- *      UDI_DATATYPE_INT16 - non-zero to enable single stepping -- not include to just retrieve the value
- *
- * Response values:
- *      UDI_DATATYPE_INT16 - the previous setting value
- */
-
-/* 
- * State request and response
- *
- * Request arguments:
- *      None
- *
- * Response values:
- *      UDI_DATATYPE_INT64 - thread id 1
- *      UDI_DATATYPE_INT16 - thread state 1
- *      ... (continued for number of threads in process)
- */
-
-/* Event specification
- *
- * Events occur asynchronously 
- * -- that is they never directly occur in response to requests.
- */
-
 typedef enum
 {
     UDI_EVENT_ERROR = 0,
@@ -379,66 +177,6 @@ typedef enum
     UDI_EVENT_MAX,
     UDI_EVENT_UNKNOWN
 } udi_event_type_e;
-
-/*
- * Event data
- *
- * +----------------+-----------+------------+------------+
- * | udi_event_type | thread id | udi_length | void *data |
- * +----------------+-----------+------------+------------+
- */
-
-/* the thread id is of type UDI_DATATYPE_INT64 */
-#define UDI_SINGLE_THREAD_ID 0xC0FFEEABC
-
-/*
- * Error event data
- *
- * UDI_DATATYPE_BYTESTREAM - error message
- */
-
-/*
- * Signal event data
- *
- * UDI_DATATYPE_ADDRESS - virtual address where the signal occurred
- * UDI_DATATYPE_INT32   - the signal number that occurred
- */
-
-/*
- * Breakpoint event data
- *
- * UDI_DATATYPE_ADDRESS - virtual addresss where the breakpoint occurred
- */
-
-/**
- * Thread create event data
- *
- * UDI_DATATYPE_INT64 - the thread id for the newly created thread
- */
-
-/**
- * Thread death event data
- */
-
-/*
- * Process exit data
- *
- * UDI_DATATYPE_INT32   - the exit code from the process exit
- */
-
-/*
- * Process fork data
- *
- * UDI_DATATYPE_INT32   - the process id for the new process
- */
-
-/*
- * Thread single step event
- */
-
-/*
- * Process cleanup data
- */
 
 #ifdef __cplusplus
 } // extern C
