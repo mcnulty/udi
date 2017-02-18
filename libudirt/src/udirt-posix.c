@@ -49,7 +49,6 @@ extern int testing_udirt(void) __attribute__((weak));
 
 // constants
 static const unsigned int PID_STR_LEN = 10;
-static const unsigned long UDIRT_HEAP_SIZE = 10485760; // 10 MB
 static const unsigned int USER_STR_LEN = 25;
 
 // file paths
@@ -261,7 +260,6 @@ udi_request *read_request_from_fd(int fd) {
 
     if (request == NULL) {
         udi_printf("malloc failed: %s\n", strerror(errno));
-        dump_heap();
         return NULL;
     }
 
@@ -1581,7 +1579,8 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
             unsigned long pc = get_pc(context);
             unsigned long successor = get_ctf_successor(pc, &errmsg, context);
             if (successor == 0) {
-                udi_printf("failed to determine successor for instruction at 0x%"PRIx64"\n", pc);
+                udi_printf("failed to determine successor for instruction at 0x%"PRIx64"\n",
+                           (uint64_t)pc);
                 result.failure = 1;
             }else{
                 breakpoint *existing_bp = find_breakpoint(successor);
@@ -1593,14 +1592,14 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
                     thr->single_step_bp = create_breakpoint(successor);
                     if (thr->single_step_bp == NULL) {
                         udi_printf("failed to create single step breakpoint at 0x%"PRIx64"\n",
-                                successor);
+                                (uint64_t) successor);
                         result.failure = 1;
                     }else{
                         thr->single_step_bp->thread = thr;
                         int install_result = install_breakpoint(thr->single_step_bp, &errmsg);
                         if (install_result != 0) {
                             udi_printf("failed to install single step breakpoint at 0x%"PRIx64"\n",
-                                    successor);
+                                    (uint64_t) successor);
                             result.failure = install_result;
                         }
                     }
@@ -1691,9 +1690,6 @@ static void enable_debug_logging() {
 static void global_variable_initialization() {
     // set allocator used for packing data
     udi_set_malloc(udi_malloc);
-
-    // initialize the malloc implementation
-    udi_set_max_mem_size(UDIRT_HEAP_SIZE);
 }
 
 /**

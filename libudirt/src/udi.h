@@ -17,9 +17,25 @@ extern "C" {
 #endif
 
 // UDI message metadata types
+typedef uint64_t udi_address;
+typedef uint32_t udi_length;
 typedef uint32_t udi_request_type;
 typedef uint32_t udi_response_type;
 typedef uint32_t udi_event_type;
+typedef uint32_t udi_data_type;
+
+/*
+ * UDI data type
+ */
+typedef enum {
+    UDI_DATATYPE_INT16 = 0,
+    UDI_DATATYPE_INT32,
+    UDI_DATATYPE_LENGTH,
+    UDI_DATATYPE_INT64,
+    UDI_DATATYPE_ADDRESS,
+    UDI_DATATYPE_BYTESTREAM // encoded as a length and a following byte stream
+} udi_data_type_e;
+
 
 /**
  * architecture of debuggee

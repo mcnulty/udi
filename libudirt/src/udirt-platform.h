@@ -14,16 +14,22 @@
 extern "C" {
 #endif
 
-#if defined(LINUX)
+#if defined(UNIX)
 
 #define _XOPEN_SOURCE 700
+
+#if defined(LINUX)
 
 // pthreads support
 #include <bits/pthreadtypes.h>
 
-#else
-#error Unknown platform
-#endif
+#endif /* LINUX */
+
+#else /* UNIX */
+
+#error Unsupported platform
+
+#endif /* UNIX */
 
 #ifdef __cplusplus
 } // extern C

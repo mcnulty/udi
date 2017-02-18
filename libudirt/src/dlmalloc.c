@@ -1637,7 +1637,7 @@ unsigned char _BitScanReverse(unsigned long *index, unsigned long mask);
 
 #ifndef WIN32
 #define MUNMAP_DEFAULT(a, s)  munmap((a), (s))
-#define MMAP_PROT            (PROT_READ|PROT_WRITE)
+/* #define MMAP_PROT            (PROT_READ|PROT_WRITE) */
 #if !defined(MAP_ANONYMOUS) && defined(MAP_ANON)
 #define MAP_ANONYMOUS        MAP_ANON
 #endif /* MAP_ANON */

@@ -15,7 +15,6 @@ libs = ['udicommon']
 
 if udibuild.IsUnix():
     sources.append('udirt-posix.c')
-    sources.append('udirt-malloc-posix.c')
     sources.append('udirt-posix-pthreads.c')
     sources.append('udirt-posix-sys.c')
 

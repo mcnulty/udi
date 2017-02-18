@@ -16,6 +16,9 @@
 #include "udi-common.h"
 #include <stdio.h>
 
+/* the thread id is of type UDI_DATATYPE_INT64 */
+#define UDI_SINGLE_THREAD_ID 0xC0FFEEABC
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -29,10 +32,9 @@ extern int udi_debug_on;
 void udi_abort(const char *file, unsigned int line);
 
 // UDI RT internal malloc
-void udi_set_max_mem_size(unsigned long max_size);
 void udi_free(void *ptr);
 void *udi_malloc(size_t length);
-void dump_heap();
+void *udi_realloc(void *ptr, size_t length);
 
 unsigned char *map_mem(size_t length);
 int unmap_mem(void *addr, size_t length);
