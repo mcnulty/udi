@@ -1,0 +1,13 @@
+[package]
+name = "libudi-c"
+version = "0.1.0"
+authors = ["Dan McNulty <dkmcnulty@gmail.com>"]
+
+[lib]
+name = "libudi"
+crate-type = [ "dylib" ]
+
+[dependencies]
+
+libudi = { path = "../libudi" }
+libc = "0.2.20"
