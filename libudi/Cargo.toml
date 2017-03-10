@@ -5,4 +5,5 @@ authors = ["Dan McNulty <dkmcnulty@gmail.com>"]
 
 [dependencies]
 
-libc = "0.2.20"
+libc = "0.2.21"
+users = "0.5.2"

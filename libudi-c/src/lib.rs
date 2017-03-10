@@ -33,14 +33,14 @@ pub struct udi_error_struct {
     msg: *const libc::c_schar,
 }
 
-unsafe fn from_libudi_result(input: Result<(), libudi::Error>) -> udi_error_struct {
+unsafe fn from_libudi_result(input: Result<(), libudi::UdiError>) -> udi_error_struct {
     match input {
         Ok(_) => udi_error_struct{ code: UDI_ERROR_NONE, msg: std::ptr::null() },
         Err(e) => match e {
-            libudi::Error::Library(msg) => {
+            libudi::UdiError::Library(msg) => {
                 udi_error_struct{ code: UDI_ERROR_LIBRARY, msg: to_error_msg(&msg) }
             },
-            libudi::Error::Request(msg) => {
+            libudi::UdiError::Request(msg) => {
                 udi_error_struct{ code: UDI_ERROR_REQUEST, msg: to_error_msg(&msg) }
             },
         },
@@ -109,14 +109,19 @@ pub unsafe extern "C" fn create_process(executable: *const libc::c_schar,
         envp_vec = vec![];
     }
 
-    let root_dir_str = match CStr::from_ptr((*config).root_dir).to_str() {
-        Ok(val) => val.to_owned(),
-        Err(_) => {
-            (*error).code = UDI_ERROR_REQUEST;
-            (*error).msg = to_error_msg("Process config root dir is not a valid UTF-8 string");
-            return std::ptr::null();
-        }
-    };
+    let root_dir_str;
+    if (*config).root_dir != std::ptr::null() {
+        root_dir_str = match CStr::from_ptr((*config).root_dir).to_str() {
+            Ok(val) => Some(val.to_owned()),
+            Err(_) => {
+                (*error).code = UDI_ERROR_REQUEST;
+                (*error).msg = to_error_msg("Process config root dir is not a valid UTF-8 string");
+                return std::ptr::null();
+            }
+        };
+    }else{
+        root_dir_str = None;
+    }
 
     let proc_config = ProcessConfig{ root_dir: root_dir_str };
 
@@ -130,11 +135,11 @@ pub unsafe extern "C" fn create_process(executable: *const libc::c_schar,
         },
         Err(e) => {
             match e {
-                libudi::Error::Library(msg) => {
+                libudi::UdiError::Library(msg) => {
                     (*error).code = UDI_ERROR_LIBRARY;
                     (*error).msg = to_error_msg(&msg);
                 },
-                libudi::Error::Request(msg) => {
+                libudi::UdiError::Request(msg) => {
                     (*error).code = UDI_ERROR_REQUEST;
                     (*error).msg = to_error_msg(&msg);
                 }
@@ -178,7 +183,7 @@ fn continue_process(process_wrapper: *const udi_process_struct) -> udi_error_str
     let mut process = match (*process_wrapper).handle.lock() {
         Ok(val) => val,
         Err(_) => {
-            return from_libudi_result(Err(libudi::Error::Library(LOCK_FAILED_MSG.to_owned())));
+            return from_libudi_result(Err(libudi::UdiError::Library(LOCK_FAILED_MSG.to_owned())));
         }
     };
 
