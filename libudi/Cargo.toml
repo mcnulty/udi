@@ -1,5 +1,5 @@
 [package]
-name = "libudi"
+name = "udi"
 version = "0.1.0"
 authors = ["Dan McNulty <dkmcnulty@gmail.com>"]
 
@@ -7,3 +7,6 @@ authors = ["Dan McNulty <dkmcnulty@gmail.com>"]
 
 libc = "0.2.21"
 users = "0.5.2"
+serde =  "0.9"
+serde_derive = "0.9"
+serde_cbor = "0.4.0"

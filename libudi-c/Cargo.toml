@@ -1,5 +1,5 @@
 [package]
-name = "libudi-c"
+name = "udi-c"
 version = "0.1.0"
 authors = ["Dan McNulty <dkmcnulty@gmail.com>"]
 
@@ -9,5 +9,5 @@ crate-type = [ "dylib" ]
 
 [dependencies]
 
-libudi = { path = "../libudi" }
+udi = { path = "../libudi" }
 libc = "0.2.20"

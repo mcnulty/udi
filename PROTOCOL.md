@@ -1,18 +1,16 @@
 # UDI Wire Protocol
 
-The UDI protocol encodes messages using [CBOR](cbor.io). Messages are composed
-of a single array data item, with a definite length. The first element in the
-array is a message type and takes on 3 possible values as an unsigned integer:
-`request(0)`, `response(1)`, `event(2)`. Further data items in the array are
-determined by the message type.
+The UDI protocol encodes messages using [CBOR](cbor.io). There are three types of messages:
+`request`, `response`, or `event`. The message type is determined by the source or destination of
+the message.
 
 ## Requests
 
-A request is a single array data item where the first nested item is the unsigned
-integer 0. The second data item is an unsigned integer indicating the request
-type. Further data items are input data required to execute on the request.
+A request is a single map data item with one guaranteed pair:
 
-The following is a list of request types and corresponding values:
+- A key of `typ` with an unsigned integer value that defines the type of the request.
+
+The possible values are in the table below:
 
 | Request Type        | Value |
 | ------------        | ----- |
@@ -32,12 +30,14 @@ The following is a list of request types and corresponding values:
 | next instruction    | 13    |
 | single step         | 14    |
 
+Each request type defines further pairs to be included in the map.
+
 ## Responses
 
-A response is a single array data item where the first nested item is the unsigned
-integer 1. The second data item is an unsigned integer indicating the response
-type. The third data item is an unsigned integer indicating the request type of
-the request for which the response was produced.
+A response is composed of three data items. The first two items always take on the following form:
+
+1. An unsigned integer value that defines the type of the response 
+2. An unsigned integer value that defines the type of the corresponding request
 
 The following is a list of response types and corresponding values:
 
@@ -46,20 +46,22 @@ The following is a list of response types and corresponding values:
 | valid         | 0     |
 | error         | 1     |
 
-Responses with a response type of `error` always have two additional data items:
+When the response type is `error`, the third data item is a map with the following pairs:
 
-1. An error code as an unsigned integer
-2. An error message as a text string
+| Key   | Value            | Description      |
+| ----- | ---------------- | -------------    | 
+| code  | unsigned integer | An error code    |
+| msg   | text string      | An error message |
 
-Responses with a response type of `valid` take on a form dictated by the request
-type of the response.
+Responses with a response type of `valid` take on a form dictated by the type of the request.
 
 ## Events
 
-An event is a single array data item where the first nested item is the
-unsigned integer 2. The second data item is an unsigned integer indicating the
-event type.  The third data item is the thread id as an unsigned integer for
-the thread that triggered the event. Further items depend on the event type.
+An event is a single map data item with two guaranteed pairs:
+
+- A key of `typ` with an unsigned integer value that defines the type of the event.
+- A key of `tid` with an unsigned integer value that identifies the thread that triggered the
+  event.
 
 The following is a list of event types and corresponding values:
 
@@ -76,6 +78,8 @@ The following is a list of event types and corresponding values:
 | single step     | 8 |
 | process cleanup | 9 |
 
+Further pairs depend on the event type.
+
 ## Request and Response Data
 
 **continue**
@@ -85,7 +89,7 @@ request to a thread.
 
 _Inputs_
 
-1. The signal to pass to the debuggee (0 for no signal) as an unsigned integer.
+- `sig`: The signal to pass to the debuggee (0 for no signal) as an unsigned integer.
 
 _Outputs_
 
@@ -97,12 +101,12 @@ Reads debuggee memory. It is an error to send this request to a thread.
 
 _Inputs_
 
-1. The virtual memory address to read from as an unsigned integer
-2. The length of bytes to read as an unsigned integer
+- `addr`: The virtual memory address to read from as an unsigned integer
+- `len`: The length of bytes to read as an unsigned integer
 
 _Outputs_
 
-1. The data read as a byte string.
+- `data`: The data read as a byte string.
 
 **write memory**
 
@@ -110,8 +114,8 @@ Writes debuggee memory. It is an error to send this request to a thread.
 
 _Inputs_
 
-1. The virtual memory address to write to as an unsigned integer
-2. The data to write as a byte string.
+- `addr`: The virtual memory address to write to as an unsigned integer
+- `data`: The data to write as a byte string.
 
 _Outputs_
 
@@ -124,11 +128,11 @@ a process.
 
 _Inputs_
 
-1. The register to read as an unsigned integer
+- `reg`: The register to read as an unsigned integer
 
 _Outputs_
 
-1. The register value as an unsigned integer
+- `value`: The register value as an unsigned integer
 
 **write register**
 
@@ -137,8 +141,8 @@ a process.
 
 _Inputs_
 
-1. The register to write as an unsigned integer
-2. The value to write as an unsigned integer
+- `reg`: The register to write as an unsigned integer
+- `value`: The value to write as an unsigned integer
 
 _Outputs_
 
@@ -155,8 +159,8 @@ No inputs.
 
 _Outputs_
 
-1. Thread id as an unsigned integer
-2. Thread state as an unsigned integer
+- `tid`: Thread id as an unsigned integer
+- `state`: Thread state as an unsigned integer
 
 **init**
 
@@ -168,10 +172,10 @@ No inputs.
 
 _Outputs_
 
-1. The UDI protocol version as an unsigned integer
-2. The architecture of the debuggee as an unsigned integer
-3. A non-zero unsigned integer if the debuggee multithread capable
-4. The tid for the initial thread as an unsigned integer
+- `v`: The UDI protocol version as an unsigned integer
+- `arch`: The architecture of the debuggee as an unsigned integer
+- `mt`: A non-zero unsigned integer if the debuggee is multithread capable
+- `tid`: The tid for the initial thread as an unsigned integer
 
 **create breakpoint**
 
@@ -179,7 +183,7 @@ Creates a breakpoint
 
 _Inputs_
 
-1. The address of the breakpoint as an unsigned integer
+- `addr`: The address of the breakpoint as an unsigned integer
 
 _Outputs_
 
@@ -191,7 +195,7 @@ Install the breakpoint into memory.
 
 _Inputs_
 
-1. The address of the breakpoint as an unsigned integer
+- `addr`: The address of the breakpoint as an unsigned integer
 
 _Outputs_
 
@@ -203,7 +207,7 @@ Removes the breakpoint from memory.
 
 _Inputs_
 
-1. The address of the breakpoint as an unsigned integer
+- `addr`: The address of the breakpoint as an unsigned integer
 
 _Outputs_
 
@@ -215,7 +219,7 @@ Delete the breakpoint
 
 _Inputs_
 
-1. The address of the breakpoint as an unsigned integer
+- `addr`: The address of the breakpoint as an unsigned integer
 
 _Outputs_
 
@@ -255,7 +259,7 @@ No inputs.
 
 _Outputs_
 
-1. The address of the next instruction as an unsigned integer
+- `addr`: The address of the next instruction as an unsigned integer
 
 **single step**
 
@@ -264,30 +268,30 @@ a process.
 
 _Inputs_
 
-1. A non-zero unsigned integer when single stepping to be enabled for the thread
+- `value`: A non-zero unsigned integer when single stepping to be enabled for the thread
 
 _Outputs_
 
-1. The previous setting as an unsigned integer
+- `value`: The previous setting as an unsigned integer
 
 ## Event Data
 
 **error**
 
-1. The error message as a text string
+- `msg`: The error message as a text string
 
 **signal**
 
-1. The virtual address where the signal occurred as an unsigned integer
-2. The signal number as an unsigned integer
+- `addr`: The virtual address where the signal occurred as an unsigned integer
+- `sig`: The signal number as an unsigned integer
 
 **breakpoint**
 
-1. The virtual address where the breakpoint occurred as an unsigned integer
+- `addr`: The virtual address where the breakpoint occurred as an unsigned integer
 
 **thread create**
 
-1. The thread id for the newly created thread as an unsigned integer
+- `tid`: The thread id for the newly created thread as an unsigned integer
 
 **thread death**
 
@@ -295,17 +299,17 @@ No data.
 
 **process exit**
 
-1. The exit code from the process exit as an unsigned integer.
+- `code`: The exit code from the process exit as an unsigned integer.
 
 **process fork**
 
-1. The process id for the new process as an unsigned integer.
+- `pid`: The process id for the new process as an unsigned integer.
 
 **process exec**
 
-1. The path to the new executable image as a text string
-2. The arguments to the new execution as an array of text strings
-3. The environment for the new execution as an array of text strings
+- `path`: The path to the new executable image as a text string
+- `argv`: The arguments to the new execution as an array of text strings
+- `envp`: The environment for the new execution as an array of text strings
 
 **single step**
 

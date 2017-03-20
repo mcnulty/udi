@@ -10,42 +10,29 @@
 
 extern crate libc;
 extern crate users;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+
+pub mod protocol;
+pub mod error;
 
 use std::error::Error;
 use std::string::String;
 use std::result::Result;
 use std::sync::Mutex;
 use std::path::{Path, PathBuf};
-use std::fmt;
 use std::io;
 use std::fs;
+
+pub use error::UdiError;
 
 const DEFAULT_UDI_ROOT_DIR: &'static str = "/tmp/udi";
 const DEFAULT_UDI_RT_LIB_NAME: &'static str = "libudirt.so";
 const UDI_ROOT_DIR_ENV: &'static str = "UDI_ROOT_DIR";
-
-#[derive(Debug)]
-pub enum UdiError {
-    Library(String),
-    Request(String)
-}
-
-impl fmt::Display for UdiError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            UdiError::Library(ref s) => s.fmt(f),
-            UdiError::Request(ref s) => s.fmt(f),
-        }
-    }
-}
-
-impl From<io::Error> for UdiError {
-    fn from(err: io::Error) -> UdiError {
-        UdiError::Library(err.description().to_owned())
-    }
-}
-
-type UdiHandle = i32;
+const REQUEST_FILE_NAME: &'static str = "request";
+const RESPONSE_FILE_NAME: &'static str = "response";
+const EVENTS_FILE_NAME: &'static str = "events";
 
 #[derive(Debug)]
 enum ThreadState {
@@ -60,11 +47,11 @@ enum Architecture {
 } 
 
 #[derive(Debug)]
-struct Thread {
+pub struct Thread {
     initial: bool,
     tid: u64,
-    request_handle: UdiHandle,
-    response_handle: UdiHandle,
+    request_file: fs::File,
+    response_file: fs::File,
     single_step: bool,
     user_data: *const libc::c_void,
     process: Process,
@@ -74,9 +61,9 @@ struct Thread {
 #[derive(Debug)]
 pub struct Process {
     pid: u32,
-    request_handle: UdiHandle,
-    response_handle: UdiHandle,
-    events_handle: UdiHandle,
+    request_file: fs::File,
+    response_file: fs::File,
+    events_file: fs::File,
     architecture: Architecture,
     protocol_version: u32,
     multithread_capable: bool,
@@ -87,14 +74,6 @@ pub struct Process {
     threads: Vec<Thread>,
     root_dir: String
 }
-
-impl Process {
-    pub fn continue_process(&mut self) -> Result<(), UdiError> {
-        Ok(())
-    }
-}
-
-
 
 #[derive(Debug)]
 pub struct ProcessConfig {
@@ -111,19 +90,61 @@ pub fn create_process(executable: &str,
 
     create_root_udi_filesystem(&root_dir)?;
 
-    let env = create_environment(envp, &root_dir);
+    let pid = launch_process(executable, argv, envp, &root_dir)?;
 
-    let mut command = std::process::Command::new(executable);
+    let process = initialize_process(pid, root_dir)?;
 
-    for entry in env {
-        command.env(entry.0, entry.1);
-    }
+    Ok(Mutex::new(process))
+}
 
-    let mut p = Process {
-        pid: 0,
-        request_handle: -1,
-        response_handle: -1,
-        events_handle: -1,
+fn initialize_process(pid: u32, root_dir: String) -> Result<Process, UdiError> {
+
+    let mut request_path_buf = PathBuf::from(&root_dir);
+    request_path_buf.push(pid.to_string());
+    request_path_buf.push(REQUEST_FILE_NAME);
+    let request_path = request_path_buf.as_path();
+
+    let mut response_path_buf = PathBuf::from(&root_dir);
+    response_path_buf.push(pid.to_string());
+    response_path_buf.push(RESPONSE_FILE_NAME);
+    let response_path = response_path_buf.as_path();
+
+    let mut event_path_buf = PathBuf::from(&root_dir);
+    event_path_buf.push(pid.to_string());
+    event_path_buf.push(EVENTS_FILE_NAME);
+    let event_path = event_path_buf.as_path();
+
+    // poll for change in root UDI filesystem
+    // TODO use notify crate for this
+    let mut event_file_exists = false;
+    while !event_file_exists {
+        match fs::metadata(event_path) {
+            Ok(_) => {
+                event_file_exists = true;
+            },
+            Err(e) => match e.kind() {
+                io::ErrorKind::NotFound => {},
+                _ => return Err(std::convert::From::from(e))
+            }
+        };
+    };
+
+    // order matters here because POSIX FIFOs block in open calls
+
+    let request_file = fs::File::open(request_path)?;
+        
+    // TODO send init request
+
+    let response_file = fs::File::open(response_path)?;
+    let events_file = fs::File::open(event_path)?;
+
+    // TODO read init response
+    
+    let process = Process {
+        pid: pid,
+        request_file: request_file,
+        response_file: response_file,
+        events_file: events_file,
         architecture: Architecture::X32,
         protocol_version: 1,
         multithread_capable: false,
@@ -135,7 +156,30 @@ pub fn create_process(executable: &str,
         root_dir: root_dir,
     };
 
-    Ok(Mutex::new(p))
+    Ok(process)
+}
+
+/// Launch the UDI-controlled process
+fn launch_process(executable: &str,
+                  argv: &Vec<String>,
+                  envp: &Vec<String>,
+                  root_dir: &str) -> Result<u32, UdiError> {
+
+    let mut command = std::process::Command::new(executable);
+
+    let env = create_environment(envp, &root_dir);
+
+    for entry in env {
+        command.env(entry.0, entry.1);
+    }
+
+    for entry in argv {
+        command.arg(entry);
+    }
+
+    let child = command.spawn()?;
+
+    Ok(child.id())
 }
 
 /// Adds the UDI RT library into the LD_PRELOAD environ. var. It is
@@ -185,6 +229,7 @@ fn create_root_udi_filesystem(root_dir: &String) -> Result<(), UdiError> {
     mkdir_ignore_exists(user_dir_path.as_path())
 }
 
+/// Create the specified directory, ignoring the error if it already exists
 fn mkdir_ignore_exists(dir: &Path) -> Result<(), UdiError> {
     match fs::create_dir(dir) {
         Ok(_) => Ok(()),
@@ -195,9 +240,12 @@ fn mkdir_ignore_exists(dir: &Path) -> Result<(), UdiError> {
     }
 }
 
+impl Process {
+    pub fn continue_process(&mut self) -> Result<(), UdiError> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn it_works() {
-    }
 }

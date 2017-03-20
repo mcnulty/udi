@@ -10,12 +10,14 @@
 #![allow(non_camel_case_types)]
 
 extern crate libc;
-extern crate libudi;
+extern crate udi;
 
 use std::sync::{Mutex};
 use std::ffi::{CStr, CString};
 
-use libudi::{Process, ProcessConfig};
+use udi::{Process, ProcessConfig, UdiError};
+
+const UDI_DEBUG_ENV: &'static str = "UDI_DEBUG";
 
 pub struct udi_process_struct {
     handle: Mutex<Process>,
@@ -33,14 +35,14 @@ pub struct udi_error_struct {
     msg: *const libc::c_schar,
 }
 
-unsafe fn from_libudi_result(input: Result<(), libudi::UdiError>) -> udi_error_struct {
+unsafe fn from_libudi_result(input: Result<(), UdiError>) -> udi_error_struct {
     match input {
         Ok(_) => udi_error_struct{ code: UDI_ERROR_NONE, msg: std::ptr::null() },
         Err(e) => match e {
-            libudi::UdiError::Library(msg) => {
+            UdiError::Library(msg) => {
                 udi_error_struct{ code: UDI_ERROR_LIBRARY, msg: to_error_msg(&msg) }
             },
-            libudi::UdiError::Request(msg) => {
+            UdiError::Request(msg) => {
                 udi_error_struct{ code: UDI_ERROR_REQUEST, msg: to_error_msg(&msg) }
             },
         },
@@ -125,7 +127,7 @@ pub unsafe extern "C" fn create_process(executable: *const libc::c_schar,
 
     let proc_config = ProcessConfig{ root_dir: root_dir_str };
 
-    match libudi::create_process(exec_str, &argv_vec, &envp_vec, &proc_config) {
+    match udi::create_process(exec_str, &argv_vec, &envp_vec, &proc_config) {
         Ok(process) => {
             (*error).code = UDI_ERROR_NONE;
             (*error).msg = std::ptr::null();
@@ -135,11 +137,11 @@ pub unsafe extern "C" fn create_process(executable: *const libc::c_schar,
         },
         Err(e) => {
             match e {
-                libudi::UdiError::Library(msg) => {
+                UdiError::Library(msg) => {
                     (*error).code = UDI_ERROR_LIBRARY;
                     (*error).msg = to_error_msg(&msg);
                 },
-                libudi::UdiError::Request(msg) => {
+                UdiError::Request(msg) => {
                     (*error).code = UDI_ERROR_REQUEST;
                     (*error).msg = to_error_msg(&msg);
                 }
@@ -183,7 +185,7 @@ fn continue_process(process_wrapper: *const udi_process_struct) -> udi_error_str
     let mut process = match (*process_wrapper).handle.lock() {
         Ok(val) => val,
         Err(_) => {
-            return from_libudi_result(Err(libudi::UdiError::Library(LOCK_FAILED_MSG.to_owned())));
+            return from_libudi_result(Err(UdiError::Library(LOCK_FAILED_MSG.to_owned())));
         }
     };
 
