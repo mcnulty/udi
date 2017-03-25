@@ -8,7 +8,7 @@ the message.
 
 A request is a single map data item with one guaranteed pair:
 
-- A key of `typ` with an unsigned integer value that defines the type of the request.
+- A key of `type` with an unsigned integer value that defines the type of the request.
 
 The possible values are in the table below:
 
@@ -59,7 +59,7 @@ Responses with a response type of `valid` take on a form dictated by the type of
 
 An event is a single map data item with two guaranteed pairs:
 
-- A key of `typ` with an unsigned integer value that defines the type of the event.
+- A key of `type` with an unsigned integer value that defines the type of the event.
 - A key of `tid` with an unsigned integer value that identifies the thread that triggered the
   event.
 

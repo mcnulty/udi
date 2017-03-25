@@ -10,20 +10,19 @@
 
 extern crate serde_cbor;
 
-use std::string::String;
 use std::io::Read;
-use serde::de::Deserialize;
+use serde::Deserialize;
 use serde::ser::Serialize;
 use self::serde_cbor::de::Deserializer;
 
 use super::error::UdiError;
 
-const UDI_PROTOCOL_VERSION_1: u32 = 1;
+pub const UDI_PROTOCOL_VERSION_1: u32 = 1;
 
 pub mod request {
 
-    #[derive(Serialize,Debug)]
-    enum RequestType {
+    #[derive(Deserialize, Serialize, Debug)]
+    pub enum Type {
         Continue,
         ReadMemory,
         WriteMemory,
@@ -42,19 +41,38 @@ pub mod request {
     }
 
     #[derive(Serialize,Debug)]
+    pub struct Init {
+        #[serde(rename = "type")]
+        typ: Type,
+    }
+
+    impl Init {
+        pub fn new() -> Init {
+            Init{ typ: Type::Init }
+        }
+    }
+
+    #[derive(Serialize,Debug)]
     pub struct Continue {
-        typ: RequestType,
+        #[serde(rename = "type")]
+        typ: Type,
         pub sig: u32
     }
 
     impl Continue {
         pub fn new() -> Continue {
-            Continue{ typ: RequestType::Continue, sig: 0 }
+            Continue{ typ: Type::Continue, sig: 0 }
         }
     }
 }
 
 pub mod response {
+
+    #[derive(Deserialize,Debug)]
+    pub enum Type {
+        Valid,
+        Error
+    }
 
     #[derive(Deserialize,Debug)]
     pub struct Init {
@@ -78,34 +96,33 @@ pub fn serialize_message<T: Serialize>(msg: &T) -> Result<Vec<u8>, UdiError> {
 pub fn read_response<T: Deserialize, R: Read>(reader: R) -> Result<T, UdiError> {
     let mut de = Deserializer::new(reader);
     
-    let response_type: u32 = Deserialize::deserialize(&mut de)?;
-    let request_type: u32 = Deserialize::deserialize(&mut de)?;
+    let response_type: response::Type = Deserialize::deserialize(&mut de)?;
+    <request::Type as Deserialize>::deserialize(&mut de)?;
 
     match response_type {
-        ResponseType::Valid => Ok(Deserialize::deserialize(&mut de)?),
-        ResponseType::Error => {
+        response::Type::Valid => Ok(Deserialize::deserialize(&mut de)?),
+        response::Type::Error => {
             let err: response::ResponseError = Deserialize::deserialize(&mut de)?;
             Err(UdiError::Request(err.msg))
         }
     }
 }
 
-enum ResponseType {
-    Valid,
-    Error
-}
+pub mod event {
 
-enum EventType {
-    Error,
-    Signal,
-    Breakpoint,
-    ThreadCreate,
-    ThreadDeath,
-    ProcessExit,
-    ProcessFork,
-    ProcessExec,
-    SingleStep,
-    ProcessCleanup
+    #[derive(Deserialize, Debug)]
+    pub enum Type {
+        Error,
+        Signal,
+        Breakpoint,
+        ThreadCreate,
+        ThreadDeath,
+        ProcessExit,
+        ProcessFork,
+        ProcessExec,
+        SingleStep,
+        ProcessCleanup
+    }
 }
 
 #[repr(C)]
