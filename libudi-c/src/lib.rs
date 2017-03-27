@@ -12,7 +12,7 @@
 extern crate libc;
 extern crate udi;
 
-use std::sync::{Mutex};
+use std::sync::{Mutex,Arc};
 use std::ffi::{CStr, CString};
 
 use udi::{Process, ProcessConfig, UdiError};
@@ -20,7 +20,7 @@ use udi::{Process, ProcessConfig, UdiError};
 const UDI_DEBUG_ENV: &'static str = "UDI_DEBUG";
 
 pub struct udi_process_struct {
-    handle: Mutex<Process>,
+    handle: Arc<Mutex<Process>>,
 }
 
 const UDI_ERROR_LIBRARY: libc::c_int = 0;

@@ -14,16 +14,21 @@ extern crate serde;
 extern crate serde_derive;
 
 use std::fs;
+use std::sync::{Mutex, Arc};
 
 pub mod protocol;
 pub mod error;
 mod create;
 mod process;
 mod thread;
+mod events;
 
 pub use error::UdiError;
 pub use create::create_process;
 pub use create::ProcessConfig;
+pub use events::Event;
+pub use events::EventData;
+pub use events::wait_for_events;
 
 #[derive(Debug)]
 enum Architecture {
@@ -52,7 +57,7 @@ pub struct Process {
     terminating: bool,
     terminated: bool,
     user_data: *const libc::c_void,
-    threads: Vec<Thread>,
+    threads: Vec<Arc<Mutex<Thread>>>,
     root_dir: String
 }
 

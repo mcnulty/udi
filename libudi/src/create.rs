@@ -11,7 +11,7 @@
 extern crate users;
 
 use std::string::String;
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use std::path::{PathBuf, Path};
 use std::io::{self,Write};
 use std::fs;
@@ -41,7 +41,7 @@ pub struct ProcessConfig {
 pub fn create_process(executable: &str,
                       argv: &Vec<String>,
                       envp: &Vec<String>,
-                      config: &ProcessConfig) -> Result<Mutex<Process>, UdiError> {
+                      config: &ProcessConfig) -> Result<Arc<Mutex<Process>>, UdiError> {
 
     let root_dir = config.root_dir.clone().unwrap_or(DEFAULT_UDI_ROOT_DIR.to_owned());
 
@@ -54,7 +54,7 @@ pub fn create_process(executable: &str,
 
     let process = initialize_process(pid, (*root_dir_buf.to_string_lossy()).to_owned())?;
 
-    Ok(Mutex::new(process))
+    Ok(Arc::new(Mutex::new(process)))
 }
 
 fn initialize_process(pid: u32, root_dir: String) -> Result<Process, UdiError> {
@@ -160,7 +160,7 @@ pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<(), UdiError
         user_data: ::std::ptr::null()
     };
 
-    process.threads.push(thr);
+    process.threads.push(Arc::new(Mutex::new(thr)));
 
     Ok(())
 }

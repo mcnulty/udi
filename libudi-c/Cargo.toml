@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Dan McNulty <dkmcnulty@gmail.com>"]
 
 [lib]
-name = "libudi"
+name = "udi"
 crate-type = [ "dylib" ]
 
 [dependencies]
