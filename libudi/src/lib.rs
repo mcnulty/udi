@@ -1,4 +1,3 @@
-//
 // Copyright (c) 2011-2017, UDI Contributors
 // All rights reserved.
 //
@@ -27,7 +26,7 @@ pub use error::UdiError;
 pub use create::create_process;
 pub use create::ProcessConfig;
 pub use events::Event;
-pub use events::EventData;
+pub use protocol::event::EventData;
 pub use events::wait_for_events;
 
 #[derive(Debug)]

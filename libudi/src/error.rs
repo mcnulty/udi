@@ -13,6 +13,10 @@ extern crate serde_cbor;
 use std::error::Error;
 use std::fmt;
 use std::io;
+use std::sync;
+
+use super::Process;
+use super::Thread;
 
 #[derive(Debug)]
 pub enum UdiError {
@@ -37,6 +41,18 @@ impl From<io::Error> for UdiError {
 
 impl From<serde_cbor::Error> for UdiError {
     fn from(err: serde_cbor::Error) -> UdiError {
+        UdiError::Library(err.description().to_owned())
+    }
+}
+
+impl<'a> From<sync::PoisonError<sync::MutexGuard<'a, Process>>> for UdiError {
+    fn from(err: sync::PoisonError<sync::MutexGuard<'a, Process>>) -> UdiError {
+        UdiError::Library(err.description().to_owned())
+    }
+}
+
+impl<'a> From<sync::PoisonError<sync::MutexGuard<'a, Thread>>> for UdiError {
+    fn from(err: sync::PoisonError<sync::MutexGuard<'a, Thread>>) -> UdiError {
         UdiError::Library(err.description().to_owned())
     }
 }

@@ -10,7 +10,7 @@
 
 extern crate serde_cbor;
 
-use std::io::Read;
+use std::io::{Read,ErrorKind};
 use serde::Deserialize;
 use serde::ser::Serialize;
 use self::serde_cbor::de::Deserializer;
@@ -19,28 +19,74 @@ use super::error::UdiError;
 
 pub const UDI_PROTOCOL_VERSION_1: u32 = 1;
 
+// From serde documentation
+macro_rules! enum_number {
+    ($name:ident { $($variant:ident = $value:expr, )* }) => {
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum $name {
+            $($variant = $value,)*
+        }
+
+        impl ::serde::Serialize for $name {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where S: ::serde::Serializer
+            {
+                serializer.serialize_u8(*self as u8)
+            }
+        }
+
+        impl ::serde::Deserialize for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where D: ::serde::Deserializer
+            {
+                struct Visitor;
+
+                impl ::serde::de::Visitor for Visitor {
+                    type Value = $name;
+
+                    fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                        formatter.write_str("positive integer")
+                    }
+
+                    fn visit_u8<E>(self, value: u8) -> Result<$name, E>
+                        where E: ::serde::de::Error
+                    {
+                        match value {
+                            $( $value => Ok($name::$variant), )*
+                            _ => Err(E::custom(
+                                format!("unknown {} value: {}",
+                                stringify!($name), value))),
+                        }
+                    }
+                }
+
+                deserializer.deserialize_u8(Visitor)
+            }
+        }
+    }
+}
+
 pub mod request {
 
-    #[derive(Deserialize, Serialize, Debug)]
-    pub enum Type {
-        Continue,
-        ReadMemory,
-        WriteMemory,
-        ReadRegister,
-        WriteRegister,
-        State,
-        Init,
-        CreateBreakpoint,
-        InstallBreakpoint,
-        RemoveBreakpoint,
-        DeleteBreakpoint,
-        ThreadSuspend,
-        ThreadResume,
-        NextInstruction,
-        SingleStep,
-    }
+	enum_number!(Type {
+        Continue = 0,
+        ReadMemory = 1,
+        WriteMemory = 2,
+        ReadRegister = 3,
+        WriteRegister = 4,
+        State = 5,
+        Init = 6,
+        CreateBreakpoint = 7,
+        InstallBreakpoint = 8,
+        RemoveBreakpoint = 9,
+        DeleteBreakpoint = 10,
+        ThreadSuspend = 11,
+        ThreadResume = 12,
+        NextInstruction = 13,
+        SingleStep = 14,
+	});
 
-    #[derive(Serialize,Debug)]
+    #[derive(Deserialize, Serialize, Debug)]
     pub struct Init {
         #[serde(rename = "type")]
         typ: Type,
@@ -52,7 +98,7 @@ pub mod request {
         }
     }
 
-    #[derive(Serialize,Debug)]
+    #[derive(Deserialize, Serialize, Debug)]
     pub struct Continue {
         #[serde(rename = "type")]
         typ: Type,
@@ -68,13 +114,12 @@ pub mod request {
 
 pub mod response {
 
-    #[derive(Deserialize,Debug)]
-    pub enum Type {
-        Valid,
-        Error
-    }
+    enum_number!(Type {
+        Valid = 0,
+        Error = 1,
+    });
 
-    #[derive(Deserialize,Debug)]
+    #[derive(Deserialize,Serialize,Debug)]
     pub struct Init {
         pub v: u32,
         pub arch: u32,
@@ -82,7 +127,7 @@ pub mod response {
         pub tid: u64
     }
 
-    #[derive(Deserialize,Debug)]
+    #[derive(Deserialize,Serialize,Debug)]
     pub struct ResponseError {
         pub code: u32,
         pub msg: String
@@ -93,7 +138,7 @@ pub fn serialize_message<T: Serialize>(msg: &T) -> Result<Vec<u8>, UdiError> {
     Ok(serde_cbor::to_vec(msg)?)
 }
 
-pub fn read_response<T: Deserialize, R: Read>(reader: R) -> Result<T, UdiError> {
+pub fn read_response<T: Deserialize, R: Read>(reader: &mut R) -> Result<T, UdiError> {
     let mut de = Deserializer::new(reader);
     
     let response_type: response::Type = Deserialize::deserialize(&mut de)?;
@@ -110,19 +155,158 @@ pub fn read_response<T: Deserialize, R: Read>(reader: R) -> Result<T, UdiError> 
 
 pub mod event {
 
-    #[derive(Deserialize, Debug)]
-    pub enum Type {
-        Error,
-        Signal,
-        Breakpoint,
-        ThreadCreate,
+    enum_number!(Type {
+        Error = 0,
+        Signal = 1,
+        Breakpoint = 2,
+        ThreadCreate = 3,
+        ThreadDeath = 4,
+        ProcessExit = 5,
+        ProcessFork = 6,
+        ProcessExec = 7,
+        SingleStep = 8,
+        ProcessCleanup = 9,
+    });
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct EventError {
+        pub msg: String
+    }
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct Signal {
+        pub addr: u64,
+        pub sig: u32
+    }
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct Breakpoint {
+        pub addr: u64
+    }
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct ThreadCreate {
+        pub tid: u64
+    }
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct ProcessExit {
+        pub code: u32
+    }
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct ProcessFork {
+        pub pid: u32
+    }
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct ProcessExec {
+        pub path: String,
+        pub argv: Vec<String>,
+        pub envp: Vec<String>
+    }
+
+    #[derive(Debug)]
+    pub enum EventData {
+        Error{ msg: String },
+        Signal{ addr: u64, sig: u32 },
+        Breakpoint{ addr: u64 },
+        ThreadCreate{ tid: u64 },
         ThreadDeath,
-        ProcessExit,
-        ProcessFork,
-        ProcessExec,
+        ProcessExit{ code: u32 },
+        ProcessFork{ pid: u32 },
+        ProcessExec{ path: String, argv: Vec<String>, envp: Vec<String> },
         SingleStep,
         ProcessCleanup
     }
+
+    #[derive(Debug)]
+    pub struct EventMessage {
+        pub tid: u64,
+        pub data: EventData
+    }
+}
+
+#[derive(Debug)]
+pub enum EventReadError {
+    Eof,
+    Udi(UdiError)
+}
+
+impl From<serde_cbor::Error> for EventReadError {
+    fn from(err: serde_cbor::Error) -> EventReadError {
+        match err {
+            serde_cbor::Error::Io(ioe) => {
+                match ioe.kind() {
+                    ErrorKind::UnexpectedEof => EventReadError::Eof,
+                    _ => EventReadError::Udi(::std::convert::From::from(ioe))
+                }
+            },
+            serde_cbor::Error::Eof => EventReadError::Eof,
+            _ => EventReadError::Udi(::std::convert::From::from(err))
+        }
+    }
+}
+
+pub fn read_event<R: Read>(reader: &mut R) -> Result<event::EventMessage, EventReadError> {
+    let mut de = Deserializer::new(reader);
+
+    let event_type: event::Type = Deserialize::deserialize(&mut de)?;
+    let tid: u64 = Deserialize::deserialize(&mut de)?;
+
+    let data = deserialize_event_data(&mut de, &event_type)?;
+
+    Ok(event::EventMessage{ tid: tid, data: data })
+}
+
+fn deserialize_event_data<R: Read>(de: &mut Deserializer<R>, event_type: &event::Type)
+    -> Result<event::EventData, EventReadError> {
+
+    let event_data = match *event_type {
+        event::Type::Error => {
+            let error_data: event::EventError = Deserialize::deserialize(de)?;
+            event::EventData::Error{ msg: error_data.msg }
+        },
+        event::Type::Signal => {
+            let signal_data: event::Signal = Deserialize::deserialize(de)?;
+            event::EventData::Signal{ addr: signal_data.addr, sig: signal_data.sig }
+        },
+        event::Type::Breakpoint => {
+            let brkpt_data: event::Breakpoint = Deserialize::deserialize(de)?;
+            event::EventData::Breakpoint{ addr: brkpt_data.addr }
+        },
+        event::Type::ThreadCreate => {
+            let thr_create_data: event::ThreadCreate = Deserialize::deserialize(de)?;
+            event::EventData::ThreadCreate{ tid: thr_create_data.tid }
+        },
+        event::Type::ThreadDeath => {
+            event::EventData::ThreadDeath
+        },
+        event::Type::ProcessExit => {
+            let exit_data: event::ProcessExit = Deserialize::deserialize(de)?;
+            event::EventData::ProcessExit{ code: exit_data.code }
+        },
+        event::Type::ProcessFork => {
+            let fork_data: event::ProcessFork = Deserialize::deserialize(de)?;
+            event::EventData::ProcessFork{ pid: fork_data.pid }
+        },
+        event::Type::ProcessExec => {
+            let exec_data: event::ProcessExec = Deserialize::deserialize(de)?;
+            event::EventData::ProcessExec{
+                path: exec_data.path,
+                argv: exec_data.argv,
+                envp: exec_data.envp
+            }
+        },
+        event::Type::SingleStep => {
+            event::EventData::SingleStep
+        },
+        event::Type::ProcessCleanup => {
+            event::EventData::ProcessCleanup
+        }
+    };
+
+    Ok(event_data)
 }
 
 #[repr(C)]

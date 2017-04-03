@@ -53,15 +53,16 @@ When the response type is `error`, the third data item is a map with the followi
 | code  | unsigned integer | An error code    |
 | msg   | text string      | An error message |
 
-Responses with a response type of `valid` take on a form dictated by the type of the request.
+Responses with a response type of `valid` have a third data item that is a map. The pairs in
+the map are dictated by the type of the request.
 
 ## Events
 
-An event is a single map data item with two guaranteed pairs:
+An event is composed of three data items. The first two items always take on the following
+form:
 
-- A key of `type` with an unsigned integer value that defines the type of the event.
-- A key of `tid` with an unsigned integer value that identifies the thread that triggered the
-  event.
+1. An unsigned integer value that defines the type of the event.
+2. An unsigned integer value that identifies tid of the thread that triggered the event.
 
 The following is a list of event types and corresponding values:
 
@@ -78,7 +79,7 @@ The following is a list of event types and corresponding values:
 | single step     | 8 |
 | process cleanup | 9 |
 
-Further pairs depend on the event type.
+The third data item is a map and its pairs are defined by the event type.
 
 ## Request and Response Data
 

@@ -8,29 +8,317 @@
 //
 #![deny(warnings)]
 
+extern crate mio;
+
 use std::sync::{Mutex,Arc};
+use std::io::{self, Read};
+use std::collections::HashMap;
+
+use self::mio::{Poll, Events, Ready, PollOpt, Token};
 
 use super::Process;
 use super::Thread;
 use super::error::UdiError;
-
-#[derive(Debug)]
-pub enum EventData {
-
-}
+use super::protocol::event::EventData;
+use super::protocol::event::EventMessage;
+use super::protocol::read_event;
+use super::protocol::EventReadError;
 
 #[derive(Debug)]
 pub struct Event {
     pub process: Arc<Mutex<Process>>,
-    pub thread: Arc<Mutex<Thread>>
+    pub thread: Arc<Mutex<Thread>>,
+    pub data: EventData
+}
+
+struct BufWrapper {
+    pub buf: Vec<u8>,
+    pub pos: usize
+}
+
+impl Read for BufWrapper {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut slice = &self.buf as &[u8];
+
+        slice = slice.split_at(self.pos).1;
+
+        let bytes_read = slice.read(buf)?;
+        self.pos += bytes_read;
+        Ok(bytes_read)
+    }
+}
+
+struct ProcData {
+    process: Arc<Mutex<Process>>,
+    event_buf: BufWrapper
 }
 
 pub fn wait_for_events(procs: Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>, UdiError> {
-    drop(procs);
+    let poll = Poll::new()?;
 
-    Ok(vec![])
+    let mut event_procs = HashMap::new();
+    let procs_len = procs.len();
+
+    for process_lock in procs {
+        let mut process = process_lock.lock()?;
+
+        let event_source = sys::EventSource::new(process.events_file.by_ref());
+        let token = Token(process.pid as usize);
+
+        poll.register(&event_source, token, Ready::readable(), PollOpt::edge())?;
+
+        event_procs.insert(token, ProcData{ process: process_lock.clone(),
+                                            event_buf: BufWrapper{ buf: vec![], pos: 0}});
+    }
+
+    let mut event_pending = false;
+    let mut output: Vec<Event> = vec![];
+    while output.len() == 0 || event_pending {
+        event_pending = false;
+
+        let mut events = Events::with_capacity(procs_len);
+
+        poll.poll(&mut events, None)?;
+
+        for event in &events {
+            if event.readiness().is_readable() {
+                let event_token = event.token();
+                if let Some(proc_data) = event_procs.get_mut(&event_token) {
+                    let proc_event_pending = handle_read_event(proc_data, &mut output)?;
+
+                    if proc_event_pending {
+                        event_pending = proc_event_pending;
+                    }
+                }else{
+                    let msg = format!("Unknown event token {:?}", event_token);
+                    return Err(UdiError::Library(msg));
+                }
+            }
+        }
+    }
+
+    Ok(output)
+}
+
+fn handle_read_event(proc_data: &mut ProcData, output: &mut Vec<Event>)
+    -> Result<bool, UdiError> {
+
+    let read_result;
+    {
+        let mut process = proc_data.process.lock()?;
+        read_result = process.events_file.read_to_end(&mut proc_data.event_buf.buf);
+    }
+
+    let proc_event_pending = match read_result {
+        Ok(_) => {
+            // Process has closed its pipe
+            let pending = read_events_for_process(proc_data.process.clone(),
+                                               &mut proc_data.event_buf,
+                                               output)?;
+
+            if pending {
+                return Err(UdiError::Library(
+                    "Received incomplete event before debuggee closed pipe".to_owned()));
+            }
+
+            let mut process = proc_data.process.lock()?;
+
+            // Add the cleanup event
+            output.push(Event{
+                process: proc_data.process.clone(),
+                thread: process.threads[0].clone(),
+                data: EventData::ProcessCleanup
+            });
+
+            process.terminated = true;
+            
+            false
+        },
+        Err(e) => match e.kind() {
+            io::ErrorKind::WouldBlock => {
+                read_events_for_process(proc_data.process.clone(),
+                                     &mut proc_data.event_buf,
+                                     output)?
+            },
+            _ => return Err(::std::convert::From::from(e))
+        }
+    };
+
+    Ok(proc_event_pending)
+}
+
+fn read_events_for_process(process_lock: Arc<Mutex<Process>>,
+                           event_buf: &mut BufWrapper,
+                           output: &mut Vec<Event>)
+    -> Result<bool, UdiError> {
+
+    let mut messages = vec![];
+
+    let pending = read_events_from_buf(event_buf, &mut messages)?;
+
+    if pending {
+        Ok(true)
+    }else{
+        let mut process = process_lock.lock()?;
+
+        for message in messages {
+            // Locate the event thread
+            let mut t = None;
+            for thr in &(process.threads) {
+                if thr.lock()?.tid == message.tid {
+                    t = Some(thr.clone());
+                    break;
+                }
+            }
+
+            process.running = false;
+
+            match message.data {
+                EventData::ProcessExit{ .. } => {
+                    process.terminating = true;
+                }
+                _ => {}
+            }
+
+            match t {
+                Some(thr) => {
+                    output.push(Event{
+                        process: process_lock.clone(),
+                        thread: thr,
+                        data: message.data
+                    });
+                },
+                None => {
+                    let msg = format!("Failed to locate event thread with tid {:?}", message.tid);
+                    return Err(UdiError::Library(msg));
+                }
+            }
+        }
+
+        Ok(false)
+    }
+}
+
+fn read_events_from_buf(event_buf: &mut BufWrapper,
+                        output: &mut Vec<EventMessage>) -> Result<bool, UdiError> {
+
+    while event_buf.buf.len() > 0 {
+        let prev_pos = event_buf.pos;
+
+        match read_event(event_buf) {
+            Ok(message) => {
+                // Remove the read data from the buffer
+                event_buf.buf.drain(0..event_buf.pos);
+                event_buf.pos = 0;
+
+                output.push(message);
+            },
+            Err(EventReadError::Eof) => {
+                // Roll back the position of the buffer
+                event_buf.pos = prev_pos;
+
+                return Ok(true);
+            },
+            Err(EventReadError::Udi(e)) => {
+                return Err(e);
+            }
+        }
+    }
+
+    Ok(false)
 }
 
 #[cfg(unix)]
 mod sys {
+
+    use std::os::unix::io::RawFd;
+    use std::os::unix::io::AsRawFd;
+    use std::io;
+    use std::fs;
+
+    use super::mio::{Ready, Poll, PollOpt, Token};
+    use super::mio::unix::EventedFd;
+    use super::mio::event::Evented;
+
+    pub struct EventSource {
+        fd: RawFd
+    }
+
+    impl EventSource {
+        pub fn new(file: &fs::File) -> EventSource {
+            EventSource{ fd: file.as_raw_fd() }
+        }
+    }
+
+    impl Evented for EventSource {
+        fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt)
+            -> io::Result<()> {
+
+            EventedFd(&self.fd).register(poll, token, interest, opts)
+        }
+
+        fn reregister(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt)
+            -> io::Result<()> {
+                
+            EventedFd(&self.fd).reregister(poll, token, interest, opts)
+        }
+
+        fn deregister(&self, poll: &Poll) -> io::Result<()> {
+            EventedFd(&self.fd).deregister(poll)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    extern crate serde_cbor;
+
+    use super::read_events_from_buf;
+    use super::super::protocol;
+    use self::serde_cbor::ser::to_writer;
+    use super::BufWrapper;
+    use super::EventMessage;
+
+    #[test]
+    fn test_read_events_from_buf() {
+        let mut buf: Vec<u8> = vec![];
+
+        to_writer(&mut buf, &protocol::event::Type::Breakpoint).unwrap();
+
+        let tid: u64 = 1;
+        to_writer(&mut buf, &tid).unwrap();
+
+        let len_before_data = buf.len();
+
+        to_writer(&mut buf, &protocol::event::Breakpoint{ addr: 0xdeadbeef }).unwrap();
+
+        let full_buf = buf.clone();
+
+        let incomplete_buf = buf.drain(0..len_before_data).collect();
+
+        let mut incomplete_buf_wrapper = BufWrapper{ buf: incomplete_buf, pos: 0 };
+
+        let mut messages: Vec<EventMessage> = vec![];
+
+        assert_eq!(true, read_events_from_buf(&mut incomplete_buf_wrapper, &mut messages).unwrap());
+        assert_eq!(0, messages.len());
+
+        let mut full_buf_wrapper = BufWrapper{ buf: full_buf, pos: 0 };
+
+        assert_eq!(false, read_events_from_buf(&mut full_buf_wrapper, &mut messages).unwrap());
+        assert_eq!(1, messages.len());
+
+        let message = &messages[0];
+        assert_eq!(1, message.tid);
+
+        match message.data {
+            protocol::event::EventData::Breakpoint{ addr } => {
+                assert_eq!(0xdeadbeef, addr);
+            },
+            _ => {
+                panic!();
+            }
+        }
+    }
 }

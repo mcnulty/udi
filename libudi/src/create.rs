@@ -95,7 +95,7 @@ fn initialize_process(pid: u32, root_dir: String) -> Result<Process, UdiError> {
     let mut response_file = fs::File::open(response_path)?;
     let events_file = fs::File::open(event_path)?;
 
-    let init: response::Init = protocol::read_response(response_file.by_ref())?;
+    let init: response::Init = protocol::read_response(&mut response_file)?;
 
     // Check compatibility with protocol version
     let version = determine_protocol(&init)?;
@@ -148,7 +148,7 @@ pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<(), UdiError
 
     let mut response_file = fs::File::open(response_path)?;
 
-    protocol::read_response::<response::Init, _>(response_file.by_ref())?;
+    protocol::read_response::<response::Init, _>(&mut response_file)?;
 
     let thr = Thread {
         initial: process.threads.len() == 0,
