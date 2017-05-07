@@ -17,7 +17,7 @@ use std::ffi::{CStr, CString};
 
 use udi::{Process, ProcessConfig, UdiError};
 
-const UDI_DEBUG_ENV: &'static str = "UDI_DEBUG";
+//const UDI_DEBUG_ENV: &'static str = "UDI_DEBUG";
 
 pub struct udi_process_struct {
     handle: Arc<Mutex<Process>>,
@@ -204,11 +204,4 @@ unsafe fn to_error_msg(msg: &str) -> *const libc::c_schar {
     let output = libc::malloc(len);
     libc::memcpy(output, cstr.as_ptr() as *const libc::c_void, len);
     output as *const libc::c_schar
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-    }
 }

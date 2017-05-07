@@ -10,7 +10,7 @@
 #ifndef _LIBUDI_H
 #define _LIBUDI_H 1
 
-#include "udi.h"
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,6 +31,117 @@ typedef enum {
     UDI_ERROR_NONE
 } udi_error_e;
 
+/**
+ * Error structure
+ */
+typedef struct udi_error_struct {
+    udi_error_e code;
+    const char *const msg;
+} udi_error;
+
+/**
+ * architecture of debuggee
+ */
+typedef enum {
+    UDI_ARCH_X86,
+    UDI_ARCH_X86_64
+} udi_arch_e;
+
+/**
+ * The version of the protocol
+ */
+typedef enum {
+    UDI_PROTOCOL_VERSION_1 = 1
+} udi_version_e;
+
+/**
+ * The running state for a thread
+ */
+typedef enum {
+    UDI_TS_RUNNING = 0,
+    UDI_TS_SUSPENDED,
+} udi_thread_state_e;
+
+/**
+ * Registers
+ */
+typedef enum {
+    // X86 registers
+    UDI_X86_MIN = 0,
+    UDI_X86_GS,
+    UDI_X86_FS,
+    UDI_X86_ES,
+    UDI_X86_DS,
+    UDI_X86_EDI,
+    UDI_X86_ESI,
+    UDI_X86_EBP,
+    UDI_X86_ESP,
+    UDI_X86_EBX,
+    UDI_X86_EDX,
+    UDI_X86_ECX,
+    UDI_X86_EAX,
+    UDI_X86_CS,
+    UDI_X86_SS,
+    UDI_X86_EIP,
+    UDI_X86_FLAGS,
+    UDI_X86_ST0,
+    UDI_X86_ST1,
+    UDI_X86_ST2,
+    UDI_X86_ST3,
+    UDI_X86_ST4,
+    UDI_X86_ST5,
+    UDI_X86_ST6,
+    UDI_X86_ST7,
+    UDI_X86_MAX,
+
+    //UDI_X86_64 registers
+    UDI_X86_64_MIN,
+    UDI_X86_64_R8,
+    UDI_X86_64_R9,
+    UDI_X86_64_R10,
+    UDI_X86_64_R11,
+    UDI_X86_64_R12,
+    UDI_X86_64_R13,
+    UDI_X86_64_R14,
+    UDI_X86_64_R15,
+    UDI_X86_64_RDI,
+    UDI_X86_64_RSI,
+    UDI_X86_64_RBP,
+    UDI_X86_64_RBX,
+    UDI_X86_64_RDX,
+    UDI_X86_64_RAX,
+    UDI_X86_64_RCX,
+    UDI_X86_64_RSP,
+    UDI_X86_64_RIP,
+    UDI_X86_64_CSGSFS,
+    UDI_X86_64_FLAGS,
+    UDI_X86_64_ST0,
+    UDI_X86_64_ST1,
+    UDI_X86_64_ST2,
+    UDI_X86_64_ST3,
+    UDI_X86_64_ST4,
+    UDI_X86_64_ST5,
+    UDI_X86_64_ST6,
+    UDI_X86_64_ST7,
+    UDI_X86_64_XMM0,
+    UDI_X86_64_XMM1,
+    UDI_X86_64_XMM2,
+    UDI_X86_64_XMM3,
+    UDI_X86_64_XMM4,
+    UDI_X86_64_XMM5,
+    UDI_X86_64_XMM6,
+    UDI_X86_64_XMM7,
+    UDI_X86_64_XMM8,
+    UDI_X86_64_XMM9,
+    UDI_X86_64_XMM10,
+    UDI_X86_64_XMM11,
+    UDI_X86_64_XMM12,
+    UDI_X86_64_XMM13,
+    UDI_X86_64_XMM14,
+    UDI_X86_64_XMM15,
+    UDI_X86_64_MAX
+} udi_register_e;
+
 // Process management //
 
 /**
@@ -48,25 +159,24 @@ typedef struct udi_proc_config_struct {
  * @param envp         the environment, if NULL, the newly created process will
  *                     inherit the environment for this process
  * @param config       the configuration for creating the process
- * @param error_code   on error, populated with the error code
- * @param errmsg       on error, populated with the error message (allocated by malloc)
+ * @param error        on error, populated with error data
  *
- * @return a handle to the created process
+ * @return a handle to the created process or NULL on error
  *
  * @see execve on a UNIX system
  */
-udi_process *create_process(const char *executable, char * const argv[],
-        char * const envp[], const udi_proc_config *config,
-        udi_error_e *error_code, char **errmsg);
+udi_process *create_process(const char *executable,
+                            char * const argv[],
+                            char * const envp[],
+                            const udi_proc_config *config,
+                            udi_error *error);
 
 /**
  * Tells the library that resources allocated for the process can be released
  *
  * @param proc          the process handle
- *
- * @return UDI_ERROR_NONE if the resources are released successfully
  */
-udi_error_e free_process(udi_process *proc);
+void free_process(udi_process *proc);
 
 /**
  * Continue a stopped UDI process
@@ -75,7 +185,7 @@ udi_error_e free_process(udi_process *proc);
  *
  * @return the result of the operation
  */
-udi_error_e continue_process(udi_process *proc);
+udi_error continue_process(udi_process *proc);
 
 /**
  * Refreshes the state of the specified process
@@ -84,7 +194,7 @@ udi_error_e continue_process(udi_process *proc);
  *
  * @return the result of the operation
  */
-udi_error_e refresh_state(udi_process *proc);
+udi_error refresh_state(udi_process *proc);
 
 // Process properties //
 
@@ -217,14 +327,14 @@ udi_thread *get_next_thread(udi_thread *thr);
  *
  * @return the result of the operation
  */
-udi_error_e resume_thread(udi_thread *thr);
+udi_error resume_thread(udi_thread *thr);
 
 /**
  * Suspend the specified thread.
  *
  * @return the result of the operation. it is an error to suspend all the threads in a process
  */
-udi_error_e suspend_thread(udi_thread *thr);
+udi_error suspend_thread(udi_thread *thr);
 
 /**
  * Sets the single step setting for a specific thread
@@ -234,7 +344,7 @@ udi_error_e suspend_thread(udi_thread *thr);
  *
  * @return the result of the operation
  */
-udi_error_e set_single_step(udi_thread *thr, int enable);
+udi_error set_single_step(udi_thread *thr, int enable);
 
 /**
  * @param thr the thread
@@ -254,7 +364,7 @@ int get_single_step(udi_thread *thr);
  * 
  * @return the result of the operation
  */
-udi_error_e create_breakpoint(udi_process *proc, udi_address addr);
+udi_error create_breakpoint(udi_process *proc, uint64_t addr);
 
 /**
  *
@@ -266,7 +376,7 @@ udi_error_e create_breakpoint(udi_process *proc, udi_address addr);
  *
  * @return the result of the operation
  */
-udi_error_e install_breakpoint(udi_process *proc, udi_address addr);
+udi_error install_breakpoint(udi_process *proc, uint64_t addr);
 
 /**
  *
@@ -278,7 +388,7 @@ udi_error_e install_breakpoint(udi_process *proc, udi_address addr);
  *
  * @return the result of the operation
  */
-udi_error_e remove_breakpoint(udi_process *proc, udi_address addr);
+udi_error remove_breakpoint(udi_process *proc, uint64_t addr);
 
 /**
  *
@@ -289,7 +399,7 @@ udi_error_e remove_breakpoint(udi_process *proc, udi_address addr);
  *
  * @return the result of the operation
  */
-udi_error_e delete_breakpoint(udi_process *proc, udi_address addr);
+udi_error delete_breakpoint(udi_process *proc, uint64_t addr);
 
 // Memory access interface //
 
@@ -304,8 +414,11 @@ udi_error_e delete_breakpoint(udi_process *proc, udi_address addr);
  *
  * @return the result of the operation
  */
-udi_error_e mem_access(udi_process *proc, int write, void *value, 
-        udi_length size, udi_address addr);
+udi_error mem_access(udi_process *proc,
+                     int write,
+                     void *value, 
+                     uint32_t size,
+                     uint64_t addr);
 
 // Register access interface //
 
@@ -319,7 +432,7 @@ udi_error_e mem_access(udi_process *proc, int write, void *value,
  *
  * @return the result of the operation
  */
-udi_error_e register_access(udi_thread *thr, int write, udi_register_e reg, udi_address *value);
+udi_error register_access(udi_thread *thr, int write, udi_register_e reg, uint64_t *value);
 
 /**
  * Gets the PC for the specified thread
@@ -329,7 +442,7 @@ udi_error_e register_access(udi_thread *thr, int write, udi_register_e reg, udi_
  *
  * @return the result of the operation
  */
-udi_error_e get_pc(udi_thread *thr, udi_address *pc);
+udi_error get_pc(udi_thread *thr, uint64_t *pc);
 
 /**
  * Gets the next instruction to be executed by the specified thread
@@ -339,18 +452,28 @@ udi_error_e get_pc(udi_thread *thr, udi_address *pc);
  *
  * @return the result of the operation
  */
-udi_error_e get_next_instruction(udi_thread *thr, udi_address *instr);
-
-// Error handling //
-
-/**
- * Get a message describing the passed error code
- *
- * @param proc the process
- */
-const char *get_last_error_message(udi_process *proc);
+udi_error get_next_instruction(udi_thread *thr, uint64_t *instr);
 
 // Event handling interface //
+
+/*
+ * Event types
+ */
+typedef enum
+{
+    UDI_EVENT_ERROR = 0,
+    UDI_EVENT_SIGNAL,
+    UDI_EVENT_BREAKPOINT,
+    UDI_EVENT_THREAD_CREATE,
+    UDI_EVENT_THREAD_DEATH,
+    UDI_EVENT_PROCESS_EXIT,
+    UDI_EVENT_PROCESS_FORK,
+    UDI_EVENT_PROCESS_EXEC,
+    UDI_EVENT_SINGLE_STEP,
+    UDI_EVENT_PROCESS_CLEANUP,
+    UDI_EVENT_MAX,
+    UDI_EVENT_UNKNOWN
+} udi_event_type_e;
 
 /**
  * Encapsulates an event in the debuggee
@@ -384,7 +507,7 @@ typedef struct udi_event_process_exit_struct {
  * typeof(udi_event.event_data) == udi_event_breakpoint
  */
 typedef struct udi_event_breakpoint_struct {
-    udi_address breakpoint_addr;
+    uint64_t breakpoint_addr;
 } udi_event_breakpoint;
 
 /**
@@ -408,7 +531,7 @@ udi_event *wait_for_events(udi_process *procs[], int num_procs);
 /**
  * @return a string representation of the specified event type
  */
-const char *get_event_type_str(udi_event_type event_type);
+const char *get_event_type_str(udi_event_type_e event_type);
 
 /**
  * Frees a event list returned by wait_for_events

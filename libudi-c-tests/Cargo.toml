@@ -1,13 +1,13 @@
 [package]
-name = "udi_c"
+name = "udi_c_tests"
 version = "0.1.0"
 authors = ["Dan McNulty <dkmcnulty@gmail.com>"]
-
-[lib]
-name = "udi"
-crate-type = [ "dylib" ]
+build = "build.rs"
 
 [dependencies]
 
-udi = { path = "../libudi" }
 libc = "0.2.20"
+
+[build-dependencies]
+
+bindgen = "0.20.0"
