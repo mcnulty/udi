@@ -480,7 +480,7 @@ typedef enum
  */
 typedef struct udi_event_struct {
     udi_event_type_e event_type;
-    udi_process *proc;
+    udi_process *process;
     udi_thread *thr;
     void *event_data;
     struct udi_event_struct *next_event;
