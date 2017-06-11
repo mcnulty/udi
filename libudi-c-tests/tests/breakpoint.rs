@@ -13,11 +13,8 @@ mod udi_ffi;
 mod native_file_tests;
 mod utils;
 
-use std::ffi::CString;
-use std::ptr;
-
 #[test]
-fn create() {
+fn breakpoint() {
     unsafe {
         let config = udi_ffi::udi_proc_config{ root_dir: ptr::null() };
 
@@ -35,7 +32,6 @@ fn create() {
                                               ptr::null(),
                                               &config as *const udi_ffi::udi_proc_config,
                                               &mut error as *mut udi_ffi::udi_error);
-
         assert!(process != ptr::null_mut());
         utils::assert_no_error(&error);
 
@@ -44,7 +40,37 @@ fn create() {
         let thread = udi_ffi::get_initial_thread(process);
         assert!(thread != ptr::null_mut());
 
+        error = udi_ffi::create_breakpoint(process, native_file_tests::SIMPLE_FUNCTION1);
+        utils::assert_no_error(&error);
+
+        error = udi_ffi::install_breakpoint(process, native_file_tests::SIMPLE_FUNCTION1);
+        utils::assert_no_error(&error);
+
         error = udi_ffi::continue_process(process);
         utils::assert_no_error(&error);
+
+        wait_for_breakpoint(thr, TEST_FUNCTION);
+
+        let pc: u64 = 0;
+        error = udi_ffi::get_pc(thr, &pc);
+        result = get_pc(thr, &pc);
+        assert_no_error(proc, result);
+
+        stringstream msg;
+        msg << "Actual: "
+            << std::hex
+            << pc
+            << std::dec
+            << " Expected: "
+            << std::hex
+            << TEST_FUNCTION
+            << std::dec;
+        test_assert_msg(msg.str().c_str(), pc == TEST_FUNCTION);
+
+        error = continue_process(process);
+        utils::assert_no_error(&error);
+
+        wait_for_exit(thr, EXIT_FAILURE);
     }
 }
+
