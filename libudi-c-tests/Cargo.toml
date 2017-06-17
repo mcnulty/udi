@@ -11,4 +11,4 @@ libc = "0.2.20"
 [build-dependencies]
 
 bindgen = "0.20.0"
-goblin = "0.0.10"
+native_file_tests = { path = "../../native-file-tests/rust-binding" }
