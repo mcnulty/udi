@@ -6,7 +6,6 @@ build = "build.rs"
 
 [dependencies]
 
-libc = "0.2.21"
 users = "0.5.2"
 serde =  "0.9"
 serde_derive = "0.9"

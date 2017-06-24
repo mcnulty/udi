@@ -3,7 +3,6 @@ name = "udi"
 version = "0.1.0"
 dependencies = [
  "downcast-rs 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "libc 0.2.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "mio 0.6.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "native_file_tests 0.1.0",
  "serde 0.9.15 (registry+https://github.com/rust-lang/crates.io-index)",
