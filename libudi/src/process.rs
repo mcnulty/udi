@@ -7,6 +7,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
 #![deny(warnings)]
+#![allow(unused_variables)]
 
 use ::std::sync::{Mutex, Arc};
 
@@ -15,9 +16,6 @@ use super::Process;
 use super::Thread;
 
 impl Process {
-    pub fn continue_process(&mut self) -> Result<(), UdiError> {
-        Ok(())
-    }
 
     pub fn is_multithread_capable(&self) -> bool {
         self.multithread_capable
@@ -31,6 +29,38 @@ impl Process {
 
     pub fn get_pid(&self) -> u32 {
         self.pid
+    }
+
+    pub fn get_architecture(&self) -> super::Architecture {
+        self.architecture
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.running
+    }
+
+    pub fn is_terminated(&self) -> bool {
+        self.terminated
+    }
+
+    pub fn continue_process(&mut self) -> Result<(), UdiError> {
+        Ok(())
+    }
+
+    pub fn create_breakpoint(&mut self, addr: u64) -> Result<(), UdiError> {
+        Ok(())
+    }
+
+    pub fn install_breakpoint(&mut self, addr: u64) -> Result<(), UdiError> {
+        Ok(())
+    }
+
+    pub fn remove_breakpoint(&mut self, addr: u64) -> Result<(), UdiError> {
+        Ok(())
+    }
+
+    pub fn delete_breakpoint(&mut self, addr: u64) -> Result<(), UdiError> {
+        Ok(())
     }
 }
 

@@ -9,10 +9,15 @@
 #![deny(warnings)]
 
 use super::Thread;
+use super::error::UdiError;
 
 impl Thread {
     pub fn get_tid(&self) -> u64 {
         return self.tid;
+    }
+
+    pub fn get_pc(&mut self) -> Result<u64, UdiError> {
+        Ok(0)
     }
 }
 

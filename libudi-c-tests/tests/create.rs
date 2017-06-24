@@ -47,7 +47,7 @@ fn create() {
         error = udi_ffi::continue_process(process);
         utils::assert_no_error(&error);
 
-        utils::wait_for_exit(process, thread, 0);
+        utils::wait_for_exit(process, thread, 1);
 
         udi_ffi::free_process(process);
     }

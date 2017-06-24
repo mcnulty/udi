@@ -12,6 +12,7 @@ serde =  "0.9"
 serde_derive = "0.9"
 serde_cbor = "0.5.2"
 mio = "0.6.6"
+downcast-rs = "1.0.0"
 
 [build-dependencies]
 native_file_tests = { path = "../../native-file-tests/rust-binding" }

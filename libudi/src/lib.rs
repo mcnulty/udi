@@ -11,9 +11,13 @@ extern crate libc;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate downcast_rs;
 
 use std::fs;
 use std::sync::{Mutex, Arc};
+
+use downcast_rs::Downcast;
 
 pub mod protocol;
 pub mod error;
@@ -29,8 +33,8 @@ pub use events::Event;
 pub use protocol::event::EventData;
 pub use events::wait_for_events;
 
-#[derive(Debug)]
-enum Architecture {
+#[derive(Debug, Copy, Clone)]
+pub enum Architecture {
     X32,
     X64
 }
@@ -42,6 +46,9 @@ fn to_arch(arch_num: u32) -> Result<Architecture, UdiError> {
         _ => Err(UdiError::Library(format!("Unknown architecture number: {}", arch_num)))
     }
 }
+
+pub trait UserData: Downcast + std::fmt::Debug {}
+impl_downcast!(UserData);
 
 #[derive(Debug)]
 pub struct Process {
@@ -55,7 +62,7 @@ pub struct Process {
     running: bool,
     terminating: bool,
     terminated: bool,
-    user_data: *const libc::c_void,
+    user_data: Option<Box<UserData>>,
     threads: Vec<Arc<Mutex<Thread>>>,
     root_dir: String
 }
@@ -74,7 +81,7 @@ pub struct Thread {
     response_file: fs::File,
     single_step: bool,
     state: ThreadState,
-    user_data: *const libc::c_void
+    user_data: Option<Box<UserData>>
 }
 
 #[cfg(test)]

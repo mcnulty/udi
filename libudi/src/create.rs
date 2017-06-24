@@ -124,7 +124,7 @@ fn initialize_process(child: &mut ::std::process::Child, root_dir: String)
         running: false,
         terminating: false,
         terminated: false,
-        user_data: ::std::ptr::null(),
+        user_data: None,
         threads: vec![],
         root_dir: root_dir,
     };
@@ -170,7 +170,7 @@ pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<(), UdiError
         response_file: response_file,
         single_step: false,
         state: ThreadState::Running,
-        user_data: ::std::ptr::null()
+        user_data: None
     };
 
     process.threads.push(Arc::new(Mutex::new(thr)));

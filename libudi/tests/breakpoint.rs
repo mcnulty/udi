@@ -16,13 +16,15 @@ mod utils;
 use udi::UdiError;
 
 #[test]
-fn create() {
-    if let Err(e) = create_test() {
+fn breakpoint() {
+    if let Err(e) = breakpoint_test() {
         panic!(e.to_string());
     }
 }
 
-fn create_test() -> Result<(), UdiError> {
+fn breakpoint_test() -> Result<(), UdiError> {
+    
+    let addr = native_file_tests::SIMPLE_FUNCTION1;
 
     let config = udi::ProcessConfig{ root_dir: None };
     let argv = Vec::new();
@@ -32,19 +34,23 @@ fn create_test() -> Result<(), UdiError> {
                                        &argv,
                                        &envp,
                                        &config)?;
-
     let thr_ref;
     {
         let mut process = proc_ref.lock()?;
 
-        assert!(!process.is_multithread_capable());
-
         thr_ref = process.get_initial_thread();
-
+        process.create_breakpoint(addr)?;
+        process.install_breakpoint(addr)?;
         process.continue_process()?;
     }
+
+    utils::wait_for_event(&proc_ref, &thr_ref, &udi::EventData::Breakpoint{ addr });
+
+    let brkpt_addr = thr_ref.lock()?.get_pc()?;
+    assert_eq!(addr, brkpt_addr);
 
     utils::wait_for_exit(&proc_ref, &thr_ref, 1);
 
     Ok(())
 }
+
