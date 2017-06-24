@@ -8,11 +8,34 @@
 //
 #![deny(warnings)]
 
+use ::std::sync::{Mutex, Arc};
+
 use super::error::UdiError;
 use super::Process;
+use super::Thread;
 
 impl Process {
     pub fn continue_process(&mut self) -> Result<(), UdiError> {
         Ok(())
+    }
+
+    pub fn is_multithread_capable(&self) -> bool {
+        self.multithread_capable
+    }
+
+    pub fn get_initial_thread(&self) -> Arc<Mutex<Thread>> {
+        assert!(self.threads.len() > 0);
+
+        self.threads[0].clone()
+    }
+
+    pub fn get_pid(&self) -> u32 {
+        self.pid
+    }
+}
+
+impl PartialEq for Process {
+    fn eq(&self, other: &Process) -> bool {
+        self.pid == other.pid
     }
 }

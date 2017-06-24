@@ -7,17 +7,6 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
 #![deny(warnings)]
+#![allow(dead_code)]
 
-use super::Thread;
-
-impl Thread {
-    pub fn get_tid(&self) -> u64 {
-        return self.tid;
-    }
-}
-
-impl PartialEq for Thread {
-    fn eq(&self, other: &Thread) -> bool {
-        self.tid == other.tid
-    }
-}
+include!(concat!(env!("OUT_DIR"), "/native_file_tests.rs"));

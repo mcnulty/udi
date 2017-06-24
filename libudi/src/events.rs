@@ -10,7 +10,7 @@
 
 extern crate mio;
 
-use std::sync::{Mutex,Arc};
+use std::sync::{Mutex,MutexGuard,Arc};
 use std::io::{self, Read};
 use std::collections::HashMap;
 
@@ -48,27 +48,29 @@ impl Read for BufWrapper {
     }
 }
 
-struct ProcData {
-    process: Arc<Mutex<Process>>,
+struct ProcessContext<'a> {
+    proc_ref: Arc<Mutex<Process>>,
+    process: MutexGuard<'a, Process>,
     event_buf: BufWrapper
 }
 
 pub fn wait_for_events(procs: Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>, UdiError> {
+
     let poll = Poll::new()?;
-
     let mut event_procs = HashMap::new();
-    let procs_len = procs.len();
+    for process in &procs {
+        let mut ctx = ProcessContext{
+            proc_ref: process.clone(),
+            process: process.lock()?,
+            event_buf: BufWrapper{ buf: vec![], pos: 0}
+        };
 
-    for process_lock in procs {
-        let mut process = process_lock.lock()?;
-
-        let event_source = sys::EventSource::new(process.events_file.by_ref());
-        let token = Token(process.pid as usize);
+        let event_source = sys::EventSource::new(ctx.process.events_file.by_ref());
+        let token = Token(ctx.process.pid as usize);
 
         poll.register(&event_source, token, Ready::readable(), PollOpt::edge())?;
 
-        event_procs.insert(token, ProcData{ process: process_lock.clone(),
-                                            event_buf: BufWrapper{ buf: vec![], pos: 0}});
+        event_procs.insert(token, ctx);
     }
 
     let mut event_pending = false;
@@ -76,15 +78,15 @@ pub fn wait_for_events(procs: Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>, Ud
     while output.len() == 0 || event_pending {
         event_pending = false;
 
-        let mut events = Events::with_capacity(procs_len);
+        let mut events = Events::with_capacity(procs.len());
 
         poll.poll(&mut events, None)?;
 
         for event in &events {
             if event.readiness().is_readable() {
                 let event_token = event.token();
-                if let Some(proc_data) = event_procs.get_mut(&event_token) {
-                    let proc_event_pending = handle_read_event(proc_data, &mut output)?;
+                if let Some(ctx) = event_procs.get_mut(&event_token) {
+                    let proc_event_pending = handle_read_event(&mut *ctx, &mut output)?;
 
                     if proc_event_pending {
                         event_pending = proc_event_pending;
@@ -100,45 +102,33 @@ pub fn wait_for_events(procs: Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>, Ud
     Ok(output)
 }
 
-fn handle_read_event(proc_data: &mut ProcData, output: &mut Vec<Event>)
+fn handle_read_event(ctx: &mut ProcessContext, output: &mut Vec<Event>)
     -> Result<bool, UdiError> {
 
-    let read_result;
-    {
-        let mut process = proc_data.process.lock()?;
-        read_result = process.events_file.read_to_end(&mut proc_data.event_buf.buf);
-    }
-
-    let proc_event_pending = match read_result {
+    let proc_event_pending = match ctx.process
+                                      .events_file
+                                      .read_to_end(&mut ctx.event_buf.buf) {
         Ok(_) => {
             // Process has closed its pipe
-            let pending = read_events_for_process(proc_data.process.clone(),
-                                               &mut proc_data.event_buf,
-                                               output)?;
-
-            if pending {
+            if read_events_for_process(ctx, output)? {
                 return Err(UdiError::Library(
                     "Received incomplete event before debuggee closed pipe".to_owned()));
             }
 
-            let mut process = proc_data.process.lock()?;
-
             // Add the cleanup event
             output.push(Event{
-                process: proc_data.process.clone(),
-                thread: process.threads[0].clone(),
+                process: ctx.proc_ref.clone(),
+                thread: ctx.process.threads[0].clone(),
                 data: EventData::ProcessCleanup
             });
 
-            process.terminated = true;
+            ctx.process.terminated = true;
             
             false
         },
         Err(e) => match e.kind() {
             io::ErrorKind::WouldBlock => {
-                read_events_for_process(proc_data.process.clone(),
-                                     &mut proc_data.event_buf,
-                                     output)?
+                read_events_for_process(ctx, output)?
             },
             _ => return Err(::std::convert::From::from(e))
         }
@@ -147,35 +137,31 @@ fn handle_read_event(proc_data: &mut ProcData, output: &mut Vec<Event>)
     Ok(proc_event_pending)
 }
 
-fn read_events_for_process(process_lock: Arc<Mutex<Process>>,
-                           event_buf: &mut BufWrapper,
-                           output: &mut Vec<Event>)
+fn read_events_for_process(ctx: &mut ProcessContext, output: &mut Vec<Event>)
     -> Result<bool, UdiError> {
 
     let mut messages = vec![];
 
-    let pending = read_events_from_buf(event_buf, &mut messages)?;
+    let pending = read_events_from_buf(&mut ctx.event_buf, &mut messages)?;
 
     if pending {
         Ok(true)
     }else{
-        let mut process = process_lock.lock()?;
-
         for message in messages {
             // Locate the event thread
             let mut t = None;
-            for thr in &(process.threads) {
+            for thr in &(ctx.process.threads) {
                 if thr.lock()?.tid == message.tid {
                     t = Some(thr.clone());
                     break;
                 }
             }
 
-            process.running = false;
+            ctx.process.running = false;
 
             match message.data {
                 EventData::ProcessExit{ .. } => {
-                    process.terminating = true;
+                    ctx.process.terminating = true;
                 }
                 _ => {}
             }
@@ -183,7 +169,7 @@ fn read_events_for_process(process_lock: Arc<Mutex<Process>>,
             match t {
                 Some(thr) => {
                     output.push(Event{
-                        process: process_lock.clone(),
+                        process: ctx.proc_ref.clone(),
                         thread: thr,
                         data: message.data
                     });
@@ -205,7 +191,7 @@ fn read_events_from_buf(event_buf: &mut BufWrapper,
     while event_buf.buf.len() > 0 {
         let prev_pos = event_buf.pos;
 
-        match read_event(event_buf) {
+        match read_event(&mut *event_buf) {
             Ok(message) => {
                 // Remove the read data from the buffer
                 event_buf.buf.drain(0..event_buf.pos);

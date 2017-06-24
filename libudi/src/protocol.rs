@@ -7,6 +7,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
 #![deny(warnings)]
+#![allow(non_camel_case_types)]
 
 extern crate serde_cbor;
 
@@ -206,7 +207,7 @@ pub mod event {
         pub envp: Vec<String>
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq)]
     pub enum EventData {
         Error{ msg: String },
         Signal{ addr: u64, sig: u32 },
@@ -248,7 +249,7 @@ impl From<serde_cbor::Error> for EventReadError {
     }
 }
 
-pub fn read_event<R: Read>(reader: &mut R) -> Result<event::EventMessage, EventReadError> {
+pub fn read_event<R: Read>(reader: R) -> Result<event::EventMessage, EventReadError> {
     let mut de = Deserializer::new(reader);
 
     let event_type: event::Type = Deserialize::deserialize(&mut de)?;

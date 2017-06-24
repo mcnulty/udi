@@ -47,17 +47,21 @@ pub fn create_process(executable: &str,
 
     create_root_udi_filesystem(&root_dir)?;
 
-    let pid = launch_process(executable, argv, envp, &root_dir)?;
+    let mut child = launch_process(executable, argv, envp, &root_dir)?;
+    let pid = child.id();
 
     let mut root_dir_buf = PathBuf::from(&root_dir);
     root_dir_buf.push(pid.to_string());
 
-    let process = initialize_process(pid, (*root_dir_buf.to_string_lossy()).to_owned())?;
+    let process = initialize_process(&mut child, (*root_dir_buf.to_string_lossy()).to_owned())?;
 
     Ok(Arc::new(Mutex::new(process)))
 }
 
-fn initialize_process(pid: u32, root_dir: String) -> Result<Process, UdiError> {
+fn initialize_process(child: &mut ::std::process::Child, root_dir: String)
+    -> Result<Process, UdiError> {
+
+    let pid = child.id();
 
     let mut request_path_buf = PathBuf::from(&root_dir);
     request_path_buf.push(REQUEST_FILE_NAME);
@@ -75,6 +79,15 @@ fn initialize_process(pid: u32, root_dir: String) -> Result<Process, UdiError> {
     // TODO use notify crate for this
     let mut event_file_exists = false;
     while !event_file_exists {
+        match child.try_wait()? {
+            Some(status) => {
+                return Err(UdiError::Library(
+                        format!("Process failed to initialize, exited with status: {}", status)))
+            },
+            None => {
+            }
+        };
+
         match fs::metadata(event_path) {
             Ok(_) => {
                 event_file_exists = true;
@@ -169,7 +182,7 @@ pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<(), UdiError
 fn launch_process(executable: &str,
                   argv: &Vec<String>,
                   envp: &Vec<String>,
-                  root_dir: &str) -> Result<u32, UdiError> {
+                  root_dir: &str) -> Result<::std::process::Child, UdiError> {
 
     let mut command = ::std::process::Command::new(executable);
 
@@ -185,7 +198,7 @@ fn launch_process(executable: &str,
 
     let child = command.spawn()?;
 
-    Ok(child.id())
+    Ok(child)
 }
 
 /// Adds the UDI RT library into the LD_PRELOAD environ. var. It is
