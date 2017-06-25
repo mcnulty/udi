@@ -16,15 +16,15 @@ mod utils;
 use udi::UdiError;
 
 #[test]
-fn breakpoint() {
-    if let Err(e) = breakpoint_test() {
+fn singlestep() {
+    if let Err(e) = singlestep_test() {
         panic!(e.to_string());
     }
 }
 
-fn breakpoint_test() -> Result<(), UdiError> {
-    
-    let addr = native_file_tests::SIMPLE_FUNCTION1;
+fn singlestep_test() -> Result<(), UdiError> {
+    let addr = native_file_tests::SIMPLE_FUNCTION2;
+    let len = native_file_tests::SIMPLE_FUNCTION2_LENGTH;
 
     let config = udi::ProcessConfig{ root_dir: None };
     let argv = Vec::new();
@@ -46,8 +46,25 @@ fn breakpoint_test() -> Result<(), UdiError> {
 
     utils::wait_for_event(&proc_ref, &thr_ref, &udi::EventData::Breakpoint{ addr });
 
-    let brkpt_addr = thr_ref.lock()?.get_pc()?;
-    assert_eq!(addr, brkpt_addr);
+    let mut current_pc = thr_ref.lock()?.get_pc()?;
+    assert_eq!(addr, current_pc);
+
+    thr_ref.lock()?.set_single_step(true)?;
+
+    // single step through the whole test function
+    let mut next_pc: u64 = 0;
+    while next_pc != 0 && next_pc < addr + len && current_pc < addr + len {
+        proc_ref.lock()?.continue_process()?;
+
+        utils::wait_for_event(&proc_ref, &thr_ref, &udi::EventData::SingleStep);
+
+        next_pc = thr_ref.lock()?.get_next_instruction()?;
+
+        current_pc = thr_ref.lock()?.get_pc()?;
+    }
+
+    // disable single stepping
+    thr_ref.lock()?.set_single_step(false)?;
 
     proc_ref.lock()?.continue_process()?;
 
@@ -55,4 +72,3 @@ fn breakpoint_test() -> Result<(), UdiError> {
 
     Ok(())
 }
-
