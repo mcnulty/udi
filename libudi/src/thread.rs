@@ -28,6 +28,18 @@ impl Thread {
     pub fn get_next_instruction(&mut self) -> Result<u64, UdiError> {
         Ok(0)
     }
+
+    pub fn get_state(&self) -> super::ThreadState {
+        self.state
+    }
+
+    pub fn suspend(&mut self) -> Result<(), UdiError> {
+        Ok(())
+    }
+
+    pub fn resume(&mut self) -> Result<(), UdiError> {
+        Ok(())
+    }
 }
 
 impl PartialEq for Thread {

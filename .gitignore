@@ -6,3 +6,4 @@ config.log
 *.iml
 target/
 libudirt/build
+native-file-tests.zip

@@ -54,11 +54,11 @@ struct ProcessContext<'a> {
     event_buf: BufWrapper
 }
 
-pub fn wait_for_events(procs: Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>, UdiError> {
+pub fn wait_for_events(procs: &Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>, UdiError> {
 
     let poll = Poll::new()?;
     let mut event_procs = HashMap::new();
-    for process in &procs {
+    for process in procs {
         let mut ctx = ProcessContext{
             proc_ref: process.clone(),
             process: process.lock()?,

@@ -66,10 +66,10 @@ pub struct Process {
     root_dir: String
 }
 
-#[derive(Debug)]
-enum ThreadState {
+#[derive(Debug,Copy,Clone,PartialEq)]
+pub enum ThreadState {
     Running,
-//    Suspended
+    Suspended
 }
 
 #[derive(Debug)]

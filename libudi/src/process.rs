@@ -10,6 +10,7 @@
 #![allow(unused_variables)]
 
 use ::std::sync::{Mutex, Arc};
+use ::std::slice::Iter;
 
 use super::error::UdiError;
 use super::Process;
@@ -25,6 +26,10 @@ impl Process {
         assert!(self.threads.len() > 0);
 
         self.threads[0].clone()
+    }
+
+    pub fn threads(&self) -> Iter<Arc<Mutex<Thread>>> {
+        self.threads.iter()
     }
 
     pub fn get_pid(&self) -> u32 {
@@ -60,6 +65,10 @@ impl Process {
     }
 
     pub fn delete_breakpoint(&mut self, addr: u64) -> Result<(), UdiError> {
+        Ok(())
+    }
+
+    pub fn refresh_state(&mut self) -> Result<(), UdiError> {
         Ok(())
     }
 }

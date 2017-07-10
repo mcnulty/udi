@@ -13,9 +13,10 @@ extern crate native_file_tests;
 
 use std::env;
 use std::path::PathBuf;
+use std::process::Command;
 
 const NATIVE_FILE_TESTS_URL: &'static str =
-    "https://dl.bintray.com/mcnulty/generic/native-file-tests-0.2.0.zip";
+    "https://github.com/udidb/native-file-tests/releases/download/v0.1.0/native-file-tests-0.1.0.zip";
 
 fn generate_bindings(out_path: &PathBuf) {
     println!("cargo:rustc-link-lib=udi");
@@ -30,9 +31,28 @@ fn generate_bindings(out_path: &PathBuf) {
             .expect("Could not write udi_ffs bindings");
 }
 
+fn setup_native_file_tests(out_path: &PathBuf) {
+    let manifest_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+
+    let local_zip = manifest_path.join("native-file-tests.zip");
+
+    if !local_zip.exists() {
+        Command::new("curl").arg("-sSfL")
+                            .arg("-o")
+                            .arg(local_zip.to_str().unwrap())
+                            .arg(NATIVE_FILE_TESTS_URL)
+                            .spawn()
+                            .expect("Failed to start download of native file tests zip")
+                            .wait()
+                            .expect("Failed to download native file tests zip");
+    }
+
+    native_file_tests::setup(&out_path, &local_zip);
+}
+
 fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     generate_bindings(&out_path);
-    native_file_tests::setup(&out_path, NATIVE_FILE_TESTS_URL);
+    setup_native_file_tests(&out_path);
 }
