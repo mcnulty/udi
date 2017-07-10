@@ -7,9 +7,9 @@ build = "build.rs"
 [dependencies]
 
 users = "0.5.2"
-serde =  "0.9"
-serde_derive = "0.9"
-serde_cbor = "0.5.2"
+serde =  "1.0"
+serde_derive = "1.0"
+serde_cbor = "0.6"
 mio = "0.6.6"
 downcast-rs = "1.0.0"
 

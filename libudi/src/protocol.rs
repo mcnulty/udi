@@ -12,7 +12,8 @@
 extern crate serde_cbor;
 
 use std::io::{Read,ErrorKind};
-use serde::Deserialize;
+
+use serde::de::{Deserialize, DeserializeOwned};
 use serde::ser::Serialize;
 use self::serde_cbor::de::Deserializer;
 
@@ -32,26 +33,29 @@ macro_rules! enum_number {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
                 where S: ::serde::Serializer
             {
-                serializer.serialize_u8(*self as u8)
+                // Serialize the enum as a u64.
+                serializer.serialize_u64(*self as u64)
             }
         }
 
-        impl ::serde::Deserialize for $name {
+        impl<'de> ::serde::Deserialize<'de> for $name {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-                where D: ::serde::Deserializer
+                where D: ::serde::Deserializer<'de>
             {
                 struct Visitor;
 
-                impl ::serde::de::Visitor for Visitor {
+                impl<'de> ::serde::de::Visitor<'de> for Visitor {
                     type Value = $name;
 
                     fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
                         formatter.write_str("positive integer")
                     }
 
-                    fn visit_u8<E>(self, value: u8) -> Result<$name, E>
+                    fn visit_u64<E>(self, value: u64) -> Result<$name, E>
                         where E: ::serde::de::Error
                     {
+                        // Rust does not come with a simple way of converting a
+                        // number to an enum, so use a big `match`.
                         match value {
                             $( $value => Ok($name::$variant), )*
                             _ => Err(E::custom(
@@ -61,7 +65,8 @@ macro_rules! enum_number {
                     }
                 }
 
-                deserializer.deserialize_u8(Visitor)
+                // Deserialize the enum from a u64.
+                deserializer.deserialize_u64(Visitor)
             }
         }
     }
@@ -139,7 +144,7 @@ pub fn serialize_message<T: Serialize>(msg: &T) -> Result<Vec<u8>, UdiError> {
     Ok(serde_cbor::to_vec(msg)?)
 }
 
-pub fn read_response<T: Deserialize, R: Read>(reader: &mut R) -> Result<T, UdiError> {
+pub fn read_response<T: DeserializeOwned, R: Read>(reader: &mut R) -> Result<T, UdiError> {
     let mut de = Deserializer::new(reader);
     
     let response_type: response::Type = Deserialize::deserialize(&mut de)?;
@@ -243,7 +248,6 @@ impl From<serde_cbor::Error> for EventReadError {
                     _ => EventReadError::Udi(::std::convert::From::from(ioe))
                 }
             },
-            serde_cbor::Error::Eof => EventReadError::Eof,
             _ => EventReadError::Udi(::std::convert::From::from(err))
         }
     }
