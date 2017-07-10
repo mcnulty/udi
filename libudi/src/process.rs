@@ -48,6 +48,14 @@ impl Process {
         self.terminated
     }
 
+    pub fn set_user_data(&mut self, user_data: super::UserData) {
+        self.user_data = user_data;
+    }
+
+    pub fn get_user_data(&self) -> &super::UserData {
+        &self.user_data
+    }
+
     pub fn continue_process(&mut self) -> Result<(), UdiError> {
         Ok(())
     }
@@ -70,6 +78,14 @@ impl Process {
 
     pub fn refresh_state(&mut self) -> Result<(), UdiError> {
         Ok(())
+    }
+
+    pub fn write_mem(&mut self, data: &[u8], addr: u64) -> Result<(), UdiError> {
+        Ok(())
+    }
+
+    pub fn read_mem(&mut self, size: u32, addr: u64) -> Result<Vec<u8>, UdiError> {
+        Ok(Vec::new())
     }
 }
 

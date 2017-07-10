@@ -11,10 +11,20 @@
 
 use super::Thread;
 use super::error::UdiError;
+use super::protocol::Register;
 
 impl Thread {
+
+    pub fn set_user_data(&mut self, user_data: super::UserData) {
+        self.user_data = user_data;
+    }
+
+    pub fn get_user_data(&self) -> &super::UserData {
+        self.user_data
+    }
+
     pub fn get_tid(&self) -> u64 {
-        return self.tid;
+        self.tid
     }
 
     pub fn get_pc(&mut self) -> Result<u64, UdiError> {
@@ -38,6 +48,14 @@ impl Thread {
     }
 
     pub fn resume(&mut self) -> Result<(), UdiError> {
+        Ok(())
+    }
+
+    pub fn read_register(&mut self, reg: Register) -> Result<u64, UdiError> {
+        Ok(0)
+    }
+
+    pub fn write_register(&mut self, reg: Register, value: u64) -> Result<(), UdiError> {
         Ok(())
     }
 }
