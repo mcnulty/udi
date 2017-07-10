@@ -12,15 +12,16 @@
 use super::Thread;
 use super::error::UdiError;
 use super::protocol::Register;
+use super::UserData;
 
 impl Thread {
 
-    pub fn set_user_data(&mut self, user_data: super::UserData) {
-        self.user_data = user_data;
+    pub fn set_user_data(&mut self, user_data: Box<UserData>) {
+        self.user_data = Some(user_data);
     }
 
-    pub fn get_user_data(&self) -> &super::UserData {
-        self.user_data
+    pub fn get_user_data(&mut self) -> Option<&mut Box<UserData>> {
+        self.user_data.as_mut()
     }
 
     pub fn get_tid(&self) -> u64 {

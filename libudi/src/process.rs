@@ -11,10 +11,14 @@
 
 use ::std::sync::{Mutex, Arc};
 use ::std::slice::Iter;
+use ::std::io::Write;
+use ::std::fs::File;
 
 use super::error::UdiError;
 use super::Process;
 use super::Thread;
+use super::protocol::{request,response,read_response,serialize_message};
+use super::UserData;
 
 impl Process {
 
@@ -48,19 +52,31 @@ impl Process {
         self.terminated
     }
 
-    pub fn set_user_data(&mut self, user_data: super::UserData) {
-        self.user_data = user_data;
+    pub fn set_user_data(&mut self, user_data: Box<UserData>) {
+        self.user_data = Some(user_data);
     }
 
-    pub fn get_user_data(&self) -> &super::UserData {
-        &self.user_data
+    pub fn get_user_data(&mut self) -> Option<&mut Box<UserData>> {
+        self.user_data.as_mut()
     }
 
     pub fn continue_process(&mut self) -> Result<(), UdiError> {
+        let msg = request::Continue::new(0);
+
+        self.request_file.write_all(&serialize_message(&msg)?)?;
+
+        read_response::<response::Continue, File>(&mut self.response_file)?;
+
         Ok(())
     }
 
     pub fn create_breakpoint(&mut self, addr: u64) -> Result<(), UdiError> {
+        let msg = request::CreateBreakpoint::new(addr);
+
+        self.request_file.write_all(&serialize_message(&msg)?)?;
+
+        read_response::<response::CreateBreakpoint, File>(&mut self.response_file)?;
+
         Ok(())
     }
 

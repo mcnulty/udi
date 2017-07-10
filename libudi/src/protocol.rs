@@ -112,8 +112,21 @@ pub mod request {
     }
 
     impl Continue {
-        pub fn new() -> Continue {
-            Continue{ typ: Type::Continue, sig: 0 }
+        pub fn new(sig: u32) -> Continue {
+            Continue{ typ: Type::Continue, sig: sig }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct CreateBreakpoint {
+        #[serde(rename = "type")]
+        typ: Type,
+        pub addr: u64
+    }
+
+    impl CreateBreakpoint {
+        pub fn new(addr: u64) -> CreateBreakpoint {
+            CreateBreakpoint{ typ: Type::CreateBreakpoint, addr: addr }
         }
     }
 }
@@ -132,6 +145,12 @@ pub mod response {
         pub mt: bool,
         pub tid: u64
     }
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct Continue {}
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct CreateBreakpoint {}
 
     #[derive(Deserialize,Serialize,Debug)]
     pub struct ResponseError {
@@ -388,5 +407,5 @@ enum_number!(Register {
     UDI_X86_64_XMM13 = 67,
     UDI_X86_64_XMM14 = 68,
     UDI_X86_64_XMM15 = 69,
-    UDI_X86_64_MAX = 70
-})
+    UDI_X86_64_MAX = 70,
+});

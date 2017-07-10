@@ -82,7 +82,3 @@ pub struct Thread {
     state: ThreadState,
     user_data: Option<Box<UserData>>
 }
-
-#[cfg(test)]
-mod tests {
-}
