@@ -118,6 +118,61 @@ pub mod request {
     }
 
     #[derive(Deserialize, Serialize, Debug)]
+    pub struct ReadMemory {
+        #[serde(rename = "type")]
+        typ: Type,
+        pub addr: u64,
+        pub len: u32
+    }
+
+    impl ReadMemory {
+        pub fn new(addr: u64, len: u32) -> ReadMemory {
+            ReadMemory{ typ: Type::ReadMemory, addr, len }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct WriteMemory<'a> {
+        #[serde(rename = "type")]
+        typ: Type,
+        pub addr: u64,
+        pub data: &'a[u8]
+    }
+
+    impl<'a> WriteMemory<'a> {
+        pub fn new(addr: u64, data: &'a[u8]) -> WriteMemory {
+            WriteMemory{ typ: Type::WriteMemory, addr, data }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct ReadRegister {
+        #[serde(rename = "type")]
+        typ: Type,
+        pub reg: u32
+    }
+
+    impl ReadRegister {
+        pub fn new(reg: u32) -> ReadRegister {
+            ReadRegister{ typ: Type::ReadRegister, reg }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct WriteRegister {
+        #[serde(rename = "type")]
+        typ: Type,
+        pub reg: u32,
+        pub value: u64
+    }
+
+    impl WriteRegister {
+        pub fn new(reg: u32, value: u64) -> WriteRegister {
+            WriteRegister{ typ: Type::WriteRegister, reg, value }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
     pub struct CreateBreakpoint {
         #[serde(rename = "type")]
         typ: Type,
@@ -127,6 +182,108 @@ pub mod request {
     impl CreateBreakpoint {
         pub fn new(addr: u64) -> CreateBreakpoint {
             CreateBreakpoint{ typ: Type::CreateBreakpoint, addr: addr }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct InstallBreakpoint {
+        #[serde(rename = "type")]
+        typ: Type,
+        pub addr: u64
+    }
+
+    impl InstallBreakpoint {
+        pub fn new(addr: u64) -> InstallBreakpoint {
+            InstallBreakpoint{ typ: Type::InstallBreakpoint, addr: addr }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct RemoveBreakpoint {
+        #[serde(rename = "type")]
+        typ: Type,
+        pub addr: u64
+    }
+
+    impl RemoveBreakpoint {
+        pub fn new(addr: u64) -> RemoveBreakpoint {
+            RemoveBreakpoint{ typ: Type::RemoveBreakpoint, addr: addr }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct DeleteBreakpoint {
+        #[serde(rename = "type")]
+        typ: Type,
+        pub addr: u64
+    }
+
+    impl DeleteBreakpoint {
+        pub fn new(addr: u64) -> DeleteBreakpoint {
+            DeleteBreakpoint{ typ: Type::DeleteBreakpoint, addr: addr }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct ThreadSuspend {
+        #[serde(rename = "type")]
+        typ: Type
+    }
+
+    impl ThreadSuspend {
+        pub fn new() -> ThreadSuspend {
+            ThreadSuspend{ typ: Type::ThreadSuspend }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct ThreadResume {
+        #[serde(rename = "type")]
+        typ: Type
+    }
+
+    impl ThreadResume {
+        pub fn new() -> ThreadResume {
+            ThreadResume{ typ: Type::ThreadResume }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct State {
+        #[serde(rename = "type")]
+        typ: Type
+    }
+
+    impl State {
+        pub fn new() -> State {
+            State{ typ: Type::State }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct NextInstruction {
+        #[serde(rename = "type")]
+        typ: Type
+    }
+
+    impl NextInstruction {
+        pub fn new() -> NextInstruction {
+            NextInstruction{ typ: Type::NextInstruction }
+        }
+    }
+
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct SingleStep {
+        #[serde(rename = "type")]
+        typ: Type,
+        value: u8
+    }
+
+    impl SingleStep {
+        pub fn new(setting: bool) -> SingleStep {
+            let value = setting as u8;
+
+            SingleStep{ typ: Type::SingleStep, value }
         }
     }
 }
@@ -147,10 +304,62 @@ pub mod response {
     }
 
     #[derive(Deserialize,Serialize,Debug)]
+    pub struct ReadMemory {
+        pub data: Vec<u8>
+    }
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct WriteMemory {}
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct ReadRegister {
+        pub value: u64
+    }
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct WriteRegister {}
+
+    #[derive(Deserialize,Serialize,Debug)]
     pub struct Continue {}
 
     #[derive(Deserialize,Serialize,Debug)]
     pub struct CreateBreakpoint {}
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct InstallBreakpoint {}
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct RemoveBreakpoint {}
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct DeleteBreakpoint {}
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct ThreadResume {}
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct ThreadSuspend {}
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct NextInstruction {
+        pub addr: u64
+    }
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct SingleStep {
+        pub value: u8
+    }
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct States {
+        pub states: Vec<State>
+    }
+
+    #[derive(Deserialize,Serialize,Debug)]
+    pub struct State {
+        pub tid: u64,
+        pub state: u32
+    }
 
     #[derive(Deserialize,Serialize,Debug)]
     pub struct ResponseError {

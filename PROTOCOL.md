@@ -160,8 +160,9 @@ No inputs.
 
 _Outputs_
 
-- `tid`: Thread id as an unsigned integer
-- `state`: Thread state as an unsigned integer
+- `states`: An array of maps with the following keys:
+  - `tid`: Thread id as an unsigned integer
+  - `state`: Thread state as an unsigned integer
 
 **init**
 
