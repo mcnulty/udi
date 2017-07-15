@@ -29,22 +29,9 @@ pub use error::UdiError;
 pub use create::create_process;
 pub use create::ProcessConfig;
 pub use events::Event;
-pub use protocol::event::EventData;
 pub use events::wait_for_events;
-
-#[derive(Debug, Copy, Clone)]
-pub enum Architecture {
-    X32,
-    X64
-}
-
-fn to_arch(arch_num: u32) -> Result<Architecture, UdiError> {
-    match arch_num {
-        0 => Ok(Architecture::X32),
-        1 => Ok(Architecture::X64),
-        _ => Err(UdiError::Library(format!("Unknown architecture number: {}", arch_num)))
-    }
-}
+pub use protocol::event::EventData;
+pub use protocol::Architecture;
 
 pub trait UserData: Downcast + std::fmt::Debug {}
 impl_downcast!(UserData);
@@ -80,5 +67,6 @@ pub struct Thread {
     response_file: fs::File,
     single_step: bool,
     state: ThreadState,
+    architecture: Architecture,
     user_data: Option<Box<UserData>>
 }

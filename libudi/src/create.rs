@@ -18,7 +18,6 @@ use std::fs;
 
 use super::error::UdiError;
 use super::Process;
-use super::to_arch;
 use super::Thread;
 use super::ThreadState;
 use super::protocol;
@@ -118,7 +117,7 @@ fn initialize_process(child: &mut ::std::process::Child, root_dir: String)
         request_file: request_file,
         response_file: response_file,
         events_file: events_file,
-        architecture: to_arch(init.arch)?,
+        architecture: init.arch,
         protocol_version: version,
         multithread_capable: init.mt,
         running: false,
@@ -170,6 +169,7 @@ pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<(), UdiError
         response_file: response_file,
         single_step: false,
         state: ThreadState::Running,
+        architecture: process.architecture,
         user_data: None
     };
 
