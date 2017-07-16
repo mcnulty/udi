@@ -9,23 +9,16 @@ import os
 sys.path.append(os.path.abspath('udibuild'))
 import udibuild
 
-topenv = Environment()
 
-# configuring based on the environment
-conf = Configure(topenv)
+vars = Variables(['.udirt.config'])
+vars.Add("UDIS86_INC", "Include directory for udis86 library")
+vars.Add("UDIS86_LIB", "Library directory for udis86 library")
+vars.Add("CBOR_INC", "Include directory cbor library")
+vars.Add("CBOR_LIB", "Library directory cbor library")
 
-if udibuild.IsX86():
-    if not conf.CheckLibWithHeader('udis86', 'udis86.h', 'c'):
-        print 'Did not find libudis86'
-        Exit(1)
+topenv = Environment(variables = vars)
 
-if not conf.CheckLibWithHeader('cbor', 'cbor.h', 'c'):
-    print('Did not find libcbor')
-    Exit(1)
-    
-topenv = conf.Finish()
-
-Export('topenv')
+Help(vars.GenerateHelpText(topenv))
 
 if topenv['CC'] == 'gcc':
     # C compiler flags
@@ -42,6 +35,21 @@ else:
     print 'Unknown compiler'
     quit()
 
+# configuring based on the environment
+conf = Configure(topenv)
+
+if "UDIS86_INC" in topenv:
+    topenv.Append(CPPPATH=[topenv["UDIS86_INC"]])
+
+if "UDIS86_LIB" in topenv:
+    topenv.Append(LIBPATH=[topenv["UDIS86_LIB"]])
+
+if "CBOR_INC" in topenv:
+    topenv.Append(CPPPATH=[topenv["CBOR_INC"]])
+
+if "CBOR_LIB" in topenv:
+    topenv.Append(LIBPATH=[topenv["CBOR_LIB"]])
+
 # platform and architecture specific defines
 if udibuild.IsUnix():
     topenv.Append(CPPDEFINES=['UNIX'])
@@ -55,6 +63,21 @@ else:
 
 if udibuild.IsLinux():
     topenv.Append(CPPDEFINES=['LINUX'])
+
+if udibuild.IsX86():
+    if not conf.CheckLibWithHeader('udis86', 'udis86.h', 'c'):
+        print 'Did not find libudis86'
+        Exit(1)
+
+if not conf.CheckLibWithHeader('cbor', 'cbor.h', 'c'):
+    print('Did not find libcbor')
+    Exit(1)
+    
+topenv = conf.Finish()
+
+vars.Save('.udirt.config', topenv)
+
+Export('topenv')
 
 # subdirectories
 topenv.SConscript('#/libudicommon/SConscript', variant_dir='#/build/libudicommon', duplicate=False)
