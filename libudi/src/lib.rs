@@ -37,17 +37,21 @@ pub trait UserData: Downcast + std::fmt::Debug {}
 impl_downcast!(UserData);
 
 #[derive(Debug)]
-pub struct Process {
-    pid: u32,
+struct ProcessFileContext {
     request_file: fs::File,
     response_file: fs::File,
-    events_file: fs::File,
+    events_file: fs::File
+}
+
+#[derive(Debug)]
+pub struct Process {
+    pid: u32,
+    file_context: Option<ProcessFileContext>,
     architecture: Architecture,
     protocol_version: u32,
     multithread_capable: bool,
     running: bool,
     terminating: bool,
-    terminated: bool,
     user_data: Option<Box<UserData>>,
     threads: Vec<Arc<Mutex<Thread>>>,
     root_dir: String
@@ -60,11 +64,16 @@ pub enum ThreadState {
 }
 
 #[derive(Debug)]
+struct ThreadFileContext {
+    request_file: fs::File,
+    response_file: fs::File
+}
+
+#[derive(Debug)]
 pub struct Thread {
     initial: bool,
     tid: u64,
-    request_file: fs::File,
-    response_file: fs::File,
+    file_context: Option<ThreadFileContext>,
     single_step: bool,
     state: ThreadState,
     architecture: Architecture,

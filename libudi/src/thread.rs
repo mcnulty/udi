@@ -80,7 +80,6 @@ impl Thread {
         let msg = request::ThreadResume::new();
 
         self.send_request::<request::ThreadResume, _>(&msg)?;
-
         Ok(())
     }
 
@@ -101,11 +100,23 @@ impl Thread {
     }
 
     fn send_request<T: DeserializeOwned, S: Serialize>(&mut self, msg: &S) -> Result<T, UdiError> {
-        self.request_file.write_all(&serialize_message(msg)?)?;
+        let ctx = match self.file_context.as_mut() {
+            Some(ctx) => ctx,
+            None => {
+                return Err(UdiError::Request(
+                        format!("Thread {:?} terminated, cannot performed requested operation",
+                                self.tid)));
+            }
+        };
 
-        read_response::<T, File>(&mut self.response_file)
+        ctx.request_file.write_all(&serialize_message(msg)?)?;
+
+        read_response::<T, File>(&mut ctx.response_file)
     }
 }
+
+
+
 
 impl PartialEq for Thread {
     fn eq(&self, other: &Thread) -> bool {

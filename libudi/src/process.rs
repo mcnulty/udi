@@ -53,7 +53,7 @@ impl Process {
     }
 
     pub fn is_terminated(&self) -> bool {
-        self.terminated
+        self.file_context.is_none()
     }
 
     pub fn set_user_data(&mut self, user_data: Box<UserData>) {
@@ -67,7 +67,23 @@ impl Process {
     pub fn continue_process(&mut self) -> Result<(), UdiError> {
         let msg = request::Continue::new(0);
 
-        self.send_request::<response::Continue, _>(&msg)?;
+        if self.terminating {
+            let ctx = match self.file_context.as_mut() {
+                Some(ctx) => ctx,
+                None => {
+                    return Err(UdiError::Request(
+                            format!("Process {:?} terminated, cannot performed requested operation",
+                                    self.pid)));
+                }
+            };
+
+            // No response is expected when continuing a terminating process
+            ctx.request_file.write_all(&serialize_message(&msg)?)?;
+        } else {
+            self.send_request::<response::Continue, _>(&msg)?;
+        }
+
+        self.running = true;
 
         Ok(())
     }
@@ -142,9 +158,19 @@ impl Process {
     }
 
     fn send_request<T: DeserializeOwned, S: Serialize>(&mut self, msg: &S) -> Result<T, UdiError> {
-        self.request_file.write_all(&serialize_message(msg)?)?;
 
-        read_response::<T, File>(&mut self.response_file)
+        let ctx = match self.file_context.as_mut() {
+            Some(ctx) => ctx,
+            None => {
+                return Err(UdiError::Request(
+                        format!("Process {:?} terminated, cannot performed requested operation",
+                                self.pid)));
+            }
+        };
+
+        ctx.request_file.write_all(&serialize_message(msg)?)?;
+
+        read_response::<T, File>(&mut ctx.response_file)
     }
 }
 

@@ -18,7 +18,9 @@ use std::fs;
 
 use super::error::UdiError;
 use super::Process;
+use super::ProcessFileContext;
 use super::Thread;
+use super::ThreadFileContext;
 use super::ThreadState;
 use super::protocol;
 use super::protocol::request;
@@ -114,15 +116,12 @@ fn initialize_process(child: &mut ::std::process::Child, root_dir: String)
     
     let mut process = Process {
         pid: pid,
-        request_file: request_file,
-        response_file: response_file,
-        events_file: events_file,
+        file_context: Some(ProcessFileContext{ request_file, response_file, events_file }),
         architecture: init.arch,
         protocol_version: version,
         multithread_capable: init.mt,
         running: false,
         terminating: false,
-        terminated: false,
         user_data: None,
         threads: vec![],
         root_dir: root_dir,
@@ -165,8 +164,7 @@ pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<(), UdiError
     let thr = Thread {
         initial: process.threads.len() == 0,
         tid: tid,
-        request_file: request_file,
-        response_file: response_file,
+        file_context: Some(ThreadFileContext{ request_file, response_file }),
         single_step: false,
         state: ThreadState::Running,
         architecture: process.architecture,
