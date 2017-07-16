@@ -41,21 +41,16 @@ pub fn wait_for_events(procs: &Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>, U
     let poll = Poll::new()?;
     let mut event_procs = HashMap::new();
     for proc_ref in procs {
-        let ctx = ProcessContext{
+        let mut ctx = ProcessContext{
             proc_ref: proc_ref.clone(),
             process: proc_ref.lock()?
         };
 
         let token = Token(ctx.process.pid as usize);
         {
-            let events_file = match ctx.process.file_context.as_ref() {
-                Some(file_context) => &file_context.events_file,
-                None => {
-                    return Err(UdiError::Request(format!("Cannot wait for events on terminated process")));
-                }
-            };
+            let file_context = ctx.process.get_file_context()?;
 
-            let event_source = sys::EventSource::new(events_file);
+            let event_source = sys::EventSource::new(&file_context.events_file);
 
             poll.register(&event_source, token, Ready::readable(), PollOpt::edge())?;
         }
@@ -90,7 +85,7 @@ pub fn wait_for_events(procs: &Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>, U
 fn handle_read_event(ctx: &mut ProcessContext)
     -> Result<Event, UdiError> {
 
-    match read_event(&mut ctx.process.file_context.as_mut().unwrap().events_file) {
+    match read_event(&mut ctx.process.get_file_context()?.events_file) {
         Ok(event_msg) => {
             let event = handle_event_message(&mut *ctx, event_msg)?;
 

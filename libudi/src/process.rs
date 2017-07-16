@@ -19,6 +19,7 @@ use super::serde::Serialize;
 
 use super::error::UdiError;
 use super::Process;
+use super::ProcessFileContext;
 use super::Thread;
 use super::ThreadState;
 use super::protocol::{request,response,read_response,serialize_message};
@@ -68,14 +69,7 @@ impl Process {
         let msg = request::Continue::new(0);
 
         if self.terminating {
-            let ctx = match self.file_context.as_mut() {
-                Some(ctx) => ctx,
-                None => {
-                    return Err(UdiError::Request(
-                            format!("Process {:?} terminated, cannot performed requested operation",
-                                    self.pid)));
-                }
-            };
+            let ctx = self.get_file_context()?;
 
             // No response is expected when continuing a terminating process
             ctx.request_file.write_all(&serialize_message(&msg)?)?;
@@ -158,19 +152,22 @@ impl Process {
     }
 
     fn send_request<T: DeserializeOwned, S: Serialize>(&mut self, msg: &S) -> Result<T, UdiError> {
-
-        let ctx = match self.file_context.as_mut() {
-            Some(ctx) => ctx,
-            None => {
-                return Err(UdiError::Request(
-                        format!("Process {:?} terminated, cannot performed requested operation",
-                                self.pid)));
-            }
-        };
+        let ctx = self.get_file_context()?;
 
         ctx.request_file.write_all(&serialize_message(msg)?)?;
 
         read_response::<T, File>(&mut ctx.response_file)
+    }
+
+    pub(crate) fn get_file_context(&mut self) -> Result<&mut ProcessFileContext, UdiError> {
+        match self.file_context.as_mut() {
+            Some(ctx) => Ok(ctx),
+            None => {
+                Err(UdiError::Request(
+                        format!("Process {:?} terminated, cannot performed requested operation",
+                                self.pid)))
+            }
+        }
     }
 }
 
