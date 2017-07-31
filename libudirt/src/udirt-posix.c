@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015, UDI Contributors
+ * Copyright (c) 2011-2017, UDI Contributors
  * All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -32,9 +32,6 @@
 #include "udi.h"
 #include "udirt.h"
 #include "udirt-posix.h"
-#include "udi-common.h"
-#include "udi-common-posix.h"
-
 
 ////////////////////////////////////
 // Definitions
@@ -48,6 +45,9 @@
 extern int testing_udirt(void) __attribute__((weak));
 
 // constants
+const char * const UDI_DS = "/";
+const unsigned int DS_LEN = 1;
+const char * const DEFAULT_UDI_ROOT_DIR = "/tmp/udi";
 static const unsigned int PID_STR_LEN = 10;
 static const unsigned int USER_STR_LEN = 25;
 
@@ -73,7 +73,7 @@ static int pass_signal = 0;
 static breakpoint *continue_bp = NULL;
 
 // the last hit breakpoint, set with continue_bp
-static udi_address last_bp_address = 0;
+static uint64_t last_bp_address = 0;
 
 // Used to force threads into the library signal handler
 extern int pthread_kill(pthread_t, int) __attribute__((weak));
@@ -661,7 +661,7 @@ int continue_handler(udi_request *req, udi_errmsg *errmsg) {
  * Standard read request handler
  */
 int read_handler(udi_request *req, udi_errmsg *errmsg) {
-    udi_address addr;
+    uint64_t addr;
     udi_length num_bytes;
 
     if ( unpack_request_read(req, &addr, &num_bytes, errmsg) ) {
@@ -700,7 +700,7 @@ int read_handler(udi_request *req, udi_errmsg *errmsg) {
  * Standard request handler interface
  */
 int write_handler(udi_request *req, udi_errmsg *errmsg) {
-    udi_address addr;
+    uint64_t addr;
     udi_length num_bytes;
     void *bytes_to_write;
 
@@ -781,7 +781,7 @@ int init_handler(udi_request *req, udi_errmsg *errmsg) {
  * Standard request handler interface
  */
 int breakpoint_create_handler(udi_request *req, udi_errmsg *errmsg) {
-    udi_address breakpoint_addr;
+    uint64_t breakpoint_addr;
 
     if ( unpack_request_breakpoint_create(req, &breakpoint_addr, errmsg) ) {
         udi_printf("%s\n", "failed to unpack data for breakpoint create request");
@@ -819,7 +819,7 @@ int breakpoint_create_handler(udi_request *req, udi_errmsg *errmsg) {
 static
 breakpoint *get_breakpoint_from_request(udi_request *req, udi_errmsg *errmsg)
 {
-    udi_address breakpoint_addr;
+    uint64_t breakpoint_addr;
 
     if ( unpack_request_breakpoint(req, &breakpoint_addr, errmsg) ) {
         udi_printf("%s\n", "failed to unpack breakpoint request");
@@ -952,7 +952,7 @@ int read_register_handler(thread *thr, udi_request *req, udi_errmsg *errmsg) {
         return REQ_ERROR;
     }
 
-    udi_address value;
+    uint64_t value;
     int result = get_register(get_architecture(), reg, errmsg, &value,
             &thr->event_state.context);
     if ( result != 0 ) {
@@ -972,7 +972,7 @@ int read_register_handler(thread *thr, udi_request *req, udi_errmsg *errmsg) {
 int write_register_handler(thread *thr, udi_request *req, udi_errmsg *errmsg) {
 
     udi_register_e reg;
-    udi_address value;
+    uint64_t value;
     if (unpack_request_write_register(req, &reg, &value, errmsg)) {
         udi_printf("failed to unpack data for write register request: %s\n",
                 errmsg->msg);
@@ -1008,8 +1008,8 @@ int next_instr_handler(thread *thr, udi_request *req, udi_errmsg *errmsg) {
 
     ucontext_t *context = &(thr->event_state.context);
 
-    udi_address pc = get_pc(context);
-    udi_address address = get_ctf_successor(pc, errmsg, context);
+    uint64_t pc = get_pc(context);
+    uint64_t address = get_ctf_successor(pc, errmsg, context);
     if (address == 0) {
         snprintf(errmsg->msg, errmsg->size, 
                 "failed to determine successor instruction from 0x%"PRIx64, pc);
@@ -1443,7 +1443,7 @@ static event_result decode_trap(thread *thr, const siginfo_t *siginfo, ucontext_
     result.failure = 0;
     result.wait_for_request = 1;
 
-    udi_address trap_address = get_trap_address(context);
+    uint64_t trap_address = get_trap_address(context);
 
     // Check and see if it corresponds to a breakpoint
     breakpoint *bp = find_breakpoint(trap_address);
@@ -2555,4 +2555,42 @@ void init_udi_rt() {
 
     // Explicitly ignore errors
     setsigmask(SIG_SETMASK, &original_set, NULL);
+}
+
+int read_all(int fd, void *dest, size_t length) 
+{
+    size_t total = 0;
+    while (total < length) {
+        ssize_t num_read = read(fd, ((unsigned char*)dest) + total, 
+                length - total);
+
+        if ( num_read == 0 ) {
+            // Treat end-of-file as a separate error
+            return -1;
+        }
+
+        if (num_read < 0) {
+            if (errno == EINTR) continue;
+            return errno;
+        }
+        total += num_read;
+    }
+
+    return 0;
+}
+
+int write_all(int fd, void *src, size_t length) {
+    size_t total = 0;
+    while (total < length) {
+        ssize_t num_written = write(fd, ((unsigned char *)src) + total, 
+                length - total);
+        if ( num_written < 0 ) {
+            if ( errno == EINTR ) continue;
+            return errno;
+        }
+
+        total += num_written;
+    }
+
+    return 0;
 }

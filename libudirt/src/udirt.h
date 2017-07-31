@@ -12,24 +12,45 @@
 #ifndef _UDI_RT_H
 #define _UDI_RT_H 1
 
-#include "udi.h"
-#include "udi-common.h"
 #include <stdio.h>
+#include <stdint.h>
 
-/* the thread id is of type UDI_DATATYPE_INT64 */
-#define UDI_SINGLE_THREAD_ID 0xC0FFEEABC
+#include "udi.h"
+#include "udirt-platform.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+// Useful macro
+#define member_sizeof(s,m) ( sizeof( ((s *)0)->m ) )
+
 // global variables
-extern char *UDI_ROOT_DIR;
+
+// platform independent variables and constants
+extern const char * const UDI_ROOT_DIR_ENV;
+extern const char * const REQUEST_FILE_NAME;
+extern const char * const RESPONSE_FILE_NAME;
+extern const char * const EVENTS_FILE_NAME;
+extern const char * const UDI_DEBUG_ENV;
+extern const uint64_t UDI_SINGLE_THREAD_ID;
+
 extern int udi_enabled;
 extern int udi_debug_on;
 
+// platform specific variables and constants
+extern const char * const DEFAULT_UDI_ROOT_DIR;
+extern const char * const UDI_DS;
+extern const unsigned int DS_LEN;
+
+extern char *UDI_ROOT_DIR;
+
 // General platform-specific functions
 void udi_abort(const char *file, unsigned int line);
+int read_all(int fd, void *dest, size_t length);
+int write_all(int fd, void *src, size_t length);
+int read_from(udirt_fd fd, uint8_t *dst, size_t length);
+int write_to(udirt_fd fd, const uint8_t *src, size_t length);
 
 // UDI RT internal malloc
 void udi_free(void *ptr);
@@ -39,21 +60,62 @@ void *udi_realloc(void *ptr, size_t length);
 unsigned char *map_mem(size_t length);
 int unmap_mem(void *addr, size_t length);
 
+// helper functions
+const char *request_type_str(udi_request_type_e req_type); 
+const char *event_type_str(udi_event_type_e event_type);
+const char *arch_str(udi_arch_e arch);
+const char *register_str(udi_register_e reg);
+
 // opaque (at this level) thread handle
 typedef struct thread_struct thread;
 
 // request handling
 udi_version_e get_protocol_version();
+
+/** Request processed successfully */
+extern const int REQ_SUCCESS;
+
+/** Unrecoverable failure caused by environment/OS error */
+extern const int REQ_ERROR;
+
+/** Failure to process request due to invalid arguments */
+extern const int REQ_FAILURE;
+
+#define ERRMSG_SIZE 4096
+typedef struct {
+    char msg[ERRMSG_SIZE];
+    unsigned int size;
+} udi_errmsg;
+
+int handle_process_request(udirt_fd fd, udi_errmsg *errmsg);
+
+// process request handlers
+int continue_handler(udirt_fd resp_fd, const continue_req *data, udi_errmsg *errmsg);
+int read_handler(udirt_fd resp_fd, const read_mem_req *data, udi_errmsg *errmsg);
+int write_handler(udirt_fd resp_fd, const write_mem_req *data, udi_errmsg *errmsg);
+int state_handler(udirt_fd resp_fd, udi_errmsg *errmsg);
+int init_handler(udirt_fd resp_fd, udi_errmsg *errmsg);
+int breakpoint_create_handler(udirt_fd resp_fd, const brkpt_req *data, udi_errmsg *errmsg);
+int breakpoint_install_handler(udirt_fd resp_fd, const brkpt_req *data, udi_errmsg *errmsg);
+int breakpoint_remove_handler(udirt_fd resp_fd, const brkpt_req *data, udi_errmsg *errmsg);
+int breakpoint_delete_handler(udirt_fd resp_fd, const brkpt_req *data, udi_errmsg *errmsg);
+
+int handle_thread_request(udirt_fd fd, thread *thr, udi_errmsg *errmsg);
+
+// thread request handlers
+int read_register_handler(udirt_fd resp_fd, thread *thr, const read_reg_req *data, udi_errmsg *errmsg);
+int write_register_handler(udirt_fd resp_fd, thread *thr, const write_reg_req *data, udi_errmsg *errmsg);
+int thr_state_handler(udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg);
+int next_instr_handler(udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg);
+int single_step_handler(udirt_fd resp_fd, thread *thr, const single_step_req *data, udi_errmsg *errmsg);
+
+// response handling
 int write_response(udi_response *response);
 int write_response_to_request(udi_response *response);
 int write_response_to_thr_request(thread *thr, udi_response *response);
-int write_event(udi_event_internal *event);
-udi_request *read_request(thread **thr);
-void free_request(udi_request *request);
 
-extern const int REQ_SUCCESS;
-extern const int REQ_ERROR;
-extern const int REQ_FAILURE;
+// event handling
+int write_event(udi_event_internal *event);
 
 // reading and writing debugee memory
 void *get_mem_access_addr();
@@ -74,9 +136,9 @@ const char *get_mem_errstr();
 unsigned long get_ctf_successor(unsigned long pc, udi_errmsg *errmsg, void *context);
 
 // register interface
-int get_register(udi_arch_e arch, udi_register_e reg, udi_errmsg *errmsg, udi_address *value, 
+int get_register(udi_arch_e arch, udi_register_e reg, udi_errmsg *errmsg, uint64_t *value, 
         const void *context);
-int set_register(udi_arch_e arch, udi_register_e reg, udi_errmsg *errmsg, udi_address value,
+int set_register(udi_arch_e arch, udi_register_e reg, udi_errmsg *errmsg, uint64_t value,
         void *context);
 int is_gp_register(udi_arch_e arch, udi_register_e reg);
 int is_fp_register(udi_arch_e arch, udi_register_e reg);
@@ -84,19 +146,19 @@ int is_fp_register(udi_arch_e arch, udi_register_e reg);
 // breakpoint handling
 typedef struct breakpoint_struct {
     unsigned char saved_bytes[8];
-    udi_address address;
+    uint64_t address;
     unsigned char in_memory;
     thread *thread; // NULL if the breakpoint is set for all threads
     struct breakpoint_struct *next_breakpoint;
 } breakpoint;
 
-breakpoint *create_breakpoint(udi_address breakpoint_addr);
+breakpoint *create_breakpoint(uint64_t breakpoint_addr);
 
 int install_breakpoint(breakpoint *bp, udi_errmsg *errmsg);
 int remove_breakpoint(breakpoint *bp, udi_errmsg *errmsg);
 int remove_breakpoint_for_continue(breakpoint *bp, udi_errmsg *errmsg);
 int delete_breakpoint(breakpoint *bp, udi_errmsg *errmsg);
-breakpoint *find_breakpoint(udi_address breakpoint_addr);
+breakpoint *find_breakpoint(uint64_t breakpoint_addr);
 
 // architecture specific breakpoint handling
 int write_breakpoint_instruction(breakpoint *bp, udi_errmsg *errmsg);

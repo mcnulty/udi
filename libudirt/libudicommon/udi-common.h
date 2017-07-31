@@ -25,21 +25,6 @@ extern "C" {
  * These variables facilitate communication between the debugger and debuggee
  */
 
-/* platform independent variables */
-extern const char *UDI_ROOT_DIR_ENV;
-extern const char *REQUEST_FILE_NAME;
-extern const char *RESPONSE_FILE_NAME;
-extern const char *EVENTS_FILE_NAME;
-extern const char *UDI_DEBUG_ENV;
-
-/* platform specific variables */
-extern const char *DEFAULT_UDI_ROOT_DIR;
-extern const char *UDI_DS;
-extern const unsigned int DS_LEN;
-
-/* useful macro */
-#define member_sizeof(s,m) ( sizeof( ((s *)0)->m ) )
-
 /*
  * data structures
  */

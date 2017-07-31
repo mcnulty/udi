@@ -18,6 +18,8 @@ extern "C" {
 
 #define _XOPEN_SOURCE 700
 
+typedef int udirt_fd;
+
 #if defined(LINUX)
 
 // pthreads support

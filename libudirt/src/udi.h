@@ -16,27 +16,6 @@
 extern "C" {
 #endif
 
-// UDI message metadata types
-typedef uint64_t udi_address;
-typedef uint32_t udi_length;
-typedef uint32_t udi_request_type;
-typedef uint32_t udi_response_type;
-typedef uint32_t udi_event_type;
-typedef uint32_t udi_data_type;
-
-/*
- * UDI data type
- */
-typedef enum {
-    UDI_DATATYPE_INT16 = 0,
-    UDI_DATATYPE_INT32,
-    UDI_DATATYPE_LENGTH,
-    UDI_DATATYPE_INT64,
-    UDI_DATATYPE_ADDRESS,
-    UDI_DATATYPE_BYTESTREAM // encoded as a length and a following byte stream
-} udi_data_type_e;
-
-
 /**
  * architecture of debuggee
  */
@@ -165,6 +144,40 @@ typedef enum
     UDI_REQ_INVALID,
 } udi_request_type_e;
 
+/* request payloads */
+
+typedef struct continue_req_struct {
+    int sig;
+} continue_req;
+
+typedef struct read_mem_req_struct {
+    uint64_t addr;
+    uint32_t len;
+} read_mem_req;
+
+typedef struct write_mem_req_struct {
+    uint64_t addr;
+    const uint8_t *data;
+    uint32_t len;
+} write_mem_req;
+
+typedef struct read_reg_req_struct {
+    udi_register_e reg;
+} read_reg_req;
+
+typedef struct write_reg_req_struct {
+    udi_register_e reg;
+    uint64_t value;
+} write_reg_req;
+
+typedef struct brkpt_req_struct {
+    uint64_t addr;
+} brkpt_req;
+
+typedef struct single_step_req_struct {
+    uint8_t setting;
+} single_step_req;
+
 /*
  * Response types
  */
@@ -175,7 +188,43 @@ typedef enum
     UDI_RESP_MAX
 } udi_response_type_e;
 
-/*
+/* response payloads */
+
+typedef struct read_mem_resp_struct {
+    const uint8_t *data;
+    uint32_t len;
+} read_mem_resp;
+
+typedef struct read_reg_resp_struct {
+    uint64_t value;
+} read_reg_resp;
+
+typedef struct thr_state_struct {
+    uint64_t tid;
+    udi_thread_state_e state;
+} thread_state;
+
+typedef struct state_resp_struct {
+    const thread_state *states;
+    uint32_t len;
+} state_resp;
+
+typedef struct init_resp_struct {
+    udi_version_e version;
+    udi_arch_e arch;
+    uint8_t mt_capable;
+    uint64_t tid;
+} init_resp;
+
+typedef struct next_instr_resp_struct {
+    uint64_t addr;
+} next_instr;
+
+typedef struct single_step_resp_struct {
+    uint8_t setting;
+} single_step_resp;
+
+/**
  * Event types
  */
 typedef enum
@@ -193,6 +242,39 @@ typedef enum
     UDI_EVENT_MAX,
     UDI_EVENT_UNKNOWN
 } udi_event_type_e;
+
+/** event payloads */
+
+typedef struct error_event_struct {
+    const char *msg;
+} error_event;
+
+typedef struct signal_event_struct {
+    uint64_t addr;
+    uint32_t sig;
+} signal_event;
+
+typedef struct brkpt_event_struct {
+    uint64_t addr;
+} brkpt_event;
+
+typedef struct thr_create_event_struct {
+    uint64_t tid;
+} thr_create_event;
+
+typedef struct process_exit_event_struct {
+    uint32_t code;
+} process_exit_event;
+
+typedef struct process_fork_event_struct {
+    uint32_t pid;
+} process_fork_event;
+
+typedef struct process_exec_event_struct {
+    const char *path;
+    const char **argv;
+    const char **envp;
+} process_exec_event;
 
 #ifdef __cplusplus
 } // extern C

@@ -9,23 +9,27 @@
 
 // UDI debuggee implementation common between all platforms
 
-#include "udirt.h"
-
 #include <string.h>
 #include <errno.h>
 #include <inttypes.h>
 
-#ifndef BREAKPOINT_HASH_SIZE
-#define BREAKPOINT_HASH_SIZE 256
-#endif
+#include "udirt.h"
 
-const int REQ_SUCCESS = 0; ///< Request processed successfully
-const int REQ_ERROR = -1; ///< Unrecoverable failure caused by environment/OS error
-const int REQ_FAILURE = -2; ///< Failure to process request due to invalid arguments
+// constants
+const int BREAKPOINT_HASH_SIZE = 256;
 
+const uint64_t UDI_SINGLE_THREAD_ID = 0xC0FEEABC;
+
+const char * const UDI_ROOT_DIR_ENV = "UDI_ROOT_DIR";
+const char * const REQUEST_FILE_NAME = "request";
+const char * const RESPONSE_FILE_NAME = "response";
+const char * const EVENTS_FILE_NAME = "events";
+const char * const UDI_DEBUG_ENV = "UDI_DEBUG";
+
+ // not enabled until initialization complete
 char *UDI_ROOT_DIR;
 int udi_debug_on = 0;
-int udi_enabled = 0; // not enabled until initialization complete
+int udi_enabled = 0;
 
 // read / write handling
 static void *mem_access_addr = NULL;
@@ -162,7 +166,7 @@ int write_memory(void *dest, const void *src, size_t num_bytes, udi_errmsg *errm
 static breakpoint *breakpoints[BREAKPOINT_HASH_SIZE];
 
 static inline
-unsigned int breakpoint_hash(udi_address address) {
+unsigned int breakpoint_hash(uint64_t address) {
     return (unsigned int)(address % BREAKPOINT_HASH_SIZE);
 }
 
@@ -173,7 +177,7 @@ unsigned int breakpoint_hash(udi_address address) {
  *
  * @return the created breakpoint, NULL on failure
  */
-breakpoint *create_breakpoint(udi_address breakpoint_addr) {
+breakpoint *create_breakpoint(uint64_t breakpoint_addr) {
     breakpoint *new_breakpoint = (breakpoint *)udi_malloc(sizeof(breakpoint));
 
     if ( new_breakpoint == NULL ) {
@@ -322,7 +326,7 @@ int delete_breakpoint(breakpoint *bp, udi_errmsg *errmsg) {
  *
  * @return the found breakpoint (NULL if not found)
  */
-breakpoint *find_breakpoint(udi_address breakpoint_addr) {
+breakpoint *find_breakpoint(uint64_t breakpoint_addr) {
     breakpoint *tmp_breakpoint = breakpoints[breakpoint_hash(breakpoint_addr)];
 
     while ( tmp_breakpoint != NULL ) {
@@ -338,4 +342,131 @@ breakpoint *find_breakpoint(udi_address breakpoint_addr) {
  */
 udi_version_e get_protocol_version() {
     return UDI_PROTOCOL_VERSION_1;
+}
+
+#define CASE_TO_STR(x) case x: return #x
+
+const char *request_type_str(udi_request_type_e req_type) {
+    switch(req_type) {
+        CASE_TO_STR(UDI_REQ_CONTINUE);
+        CASE_TO_STR(UDI_REQ_READ_MEM);
+        CASE_TO_STR(UDI_REQ_WRITE_MEM);
+        CASE_TO_STR(UDI_REQ_STATE);
+        CASE_TO_STR(UDI_REQ_INIT);
+        CASE_TO_STR(UDI_REQ_CREATE_BREAKPOINT);
+        CASE_TO_STR(UDI_REQ_INSTALL_BREAKPOINT);
+        CASE_TO_STR(UDI_REQ_REMOVE_BREAKPOINT);
+        CASE_TO_STR(UDI_REQ_DELETE_BREAKPOINT);
+        CASE_TO_STR(UDI_REQ_THREAD_SUSPEND);
+        CASE_TO_STR(UDI_REQ_THREAD_RESUME);
+        CASE_TO_STR(UDI_REQ_READ_REGISTER);
+        CASE_TO_STR(UDI_REQ_WRITE_REGISTER);
+        CASE_TO_STR(UDI_REQ_NEXT_INSTRUCTION);
+        CASE_TO_STR(UDI_REQ_SINGLE_STEP);
+        CASE_TO_STR(UDI_REQ_MAX);
+        CASE_TO_STR(UDI_REQ_INVALID);
+        default: return "UNKNOWN";
+    }
+}
+
+const char *event_type_str(udi_event_type_e event_type) {
+    switch(event_type) {
+        CASE_TO_STR(UDI_EVENT_ERROR);
+        CASE_TO_STR(UDI_EVENT_SIGNAL);
+        CASE_TO_STR(UDI_EVENT_BREAKPOINT);
+        CASE_TO_STR(UDI_EVENT_THREAD_CREATE);
+        CASE_TO_STR(UDI_EVENT_THREAD_DEATH);
+        CASE_TO_STR(UDI_EVENT_PROCESS_EXIT);
+        CASE_TO_STR(UDI_EVENT_PROCESS_FORK);
+        CASE_TO_STR(UDI_EVENT_PROCESS_EXEC);
+        CASE_TO_STR(UDI_EVENT_SINGLE_STEP);
+        CASE_TO_STR(UDI_EVENT_MAX);
+        CASE_TO_STR(UDI_EVENT_UNKNOWN);
+        default: return "UNSPECIFIED";
+    }
+}
+
+const char *arch_str(udi_arch_e arch) {
+    switch (arch) {
+        CASE_TO_STR(UDI_ARCH_X86);
+        CASE_TO_STR(UDI_ARCH_X86_64);
+        default: return "UNSPECIFIED";
+    }
+}
+
+const char *register_str(udi_register_e reg) {
+    switch (reg) {
+        CASE_TO_STR(UDI_X86_MIN);
+        CASE_TO_STR(UDI_X86_GS);
+        CASE_TO_STR(UDI_X86_FS);
+        CASE_TO_STR(UDI_X86_ES);
+        CASE_TO_STR(UDI_X86_DS);
+        CASE_TO_STR(UDI_X86_EDI);
+        CASE_TO_STR(UDI_X86_ESI);
+        CASE_TO_STR(UDI_X86_EBP);
+        CASE_TO_STR(UDI_X86_ESP);
+        CASE_TO_STR(UDI_X86_EBX);
+        CASE_TO_STR(UDI_X86_EDX);
+        CASE_TO_STR(UDI_X86_ECX);
+        CASE_TO_STR(UDI_X86_EAX);
+        CASE_TO_STR(UDI_X86_CS);
+        CASE_TO_STR(UDI_X86_SS);
+        CASE_TO_STR(UDI_X86_EIP);
+        CASE_TO_STR(UDI_X86_FLAGS);
+        CASE_TO_STR(UDI_X86_ST0);
+        CASE_TO_STR(UDI_X86_ST1);
+        CASE_TO_STR(UDI_X86_ST2);
+        CASE_TO_STR(UDI_X86_ST3);
+        CASE_TO_STR(UDI_X86_ST4);
+        CASE_TO_STR(UDI_X86_ST5);
+        CASE_TO_STR(UDI_X86_ST6);
+        CASE_TO_STR(UDI_X86_ST7);
+        CASE_TO_STR(UDI_X86_MAX);
+        CASE_TO_STR(UDI_X86_64_MIN);
+        CASE_TO_STR(UDI_X86_64_R8);
+        CASE_TO_STR(UDI_X86_64_R9);
+        CASE_TO_STR(UDI_X86_64_R10);
+        CASE_TO_STR(UDI_X86_64_R11);
+        CASE_TO_STR(UDI_X86_64_R12);
+        CASE_TO_STR(UDI_X86_64_R13);
+        CASE_TO_STR(UDI_X86_64_R14);
+        CASE_TO_STR(UDI_X86_64_R15);
+        CASE_TO_STR(UDI_X86_64_RDI);
+        CASE_TO_STR(UDI_X86_64_RSI);
+        CASE_TO_STR(UDI_X86_64_RBP);
+        CASE_TO_STR(UDI_X86_64_RBX);
+        CASE_TO_STR(UDI_X86_64_RDX);
+        CASE_TO_STR(UDI_X86_64_RAX);
+        CASE_TO_STR(UDI_X86_64_RCX);
+        CASE_TO_STR(UDI_X86_64_RSP);
+        CASE_TO_STR(UDI_X86_64_RIP);
+        CASE_TO_STR(UDI_X86_64_CSGSFS);
+        CASE_TO_STR(UDI_X86_64_FLAGS);
+        CASE_TO_STR(UDI_X86_64_ST0);
+        CASE_TO_STR(UDI_X86_64_ST1);
+        CASE_TO_STR(UDI_X86_64_ST2);
+        CASE_TO_STR(UDI_X86_64_ST3);
+        CASE_TO_STR(UDI_X86_64_ST4);
+        CASE_TO_STR(UDI_X86_64_ST5);
+        CASE_TO_STR(UDI_X86_64_ST6);
+        CASE_TO_STR(UDI_X86_64_ST7);
+        CASE_TO_STR(UDI_X86_64_XMM0);
+        CASE_TO_STR(UDI_X86_64_XMM1);
+        CASE_TO_STR(UDI_X86_64_XMM2);
+        CASE_TO_STR(UDI_X86_64_XMM3);
+        CASE_TO_STR(UDI_X86_64_XMM4);
+        CASE_TO_STR(UDI_X86_64_XMM5);
+        CASE_TO_STR(UDI_X86_64_XMM6);
+        CASE_TO_STR(UDI_X86_64_XMM7);
+        CASE_TO_STR(UDI_X86_64_XMM8);
+        CASE_TO_STR(UDI_X86_64_XMM9);
+        CASE_TO_STR(UDI_X86_64_XMM10);
+        CASE_TO_STR(UDI_X86_64_XMM11);
+        CASE_TO_STR(UDI_X86_64_XMM12);
+        CASE_TO_STR(UDI_X86_64_XMM13);
+        CASE_TO_STR(UDI_X86_64_XMM14);
+        CASE_TO_STR(UDI_X86_64_XMM15);
+        CASE_TO_STR(UDI_X86_64_MAX);
+        default: return "UNSPECIFIED";
+    }
 }

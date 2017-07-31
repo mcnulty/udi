@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015, UDI Contributors
+ * Copyright (c) 2011-2017, UDI Contributors
  * All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -16,8 +16,7 @@
 #include "udi.h"
 #include "udirt.h"
 #include "udirt-posix.h"
-#include "udi-common.h"
-#include "udi-common-posix.h"
+
 
 // pthread function types and definitions
 
@@ -95,7 +94,7 @@ uint64_t get_user_thread_id() {
  */
 static
 breakpoint *create_and_install(unsigned long breakpoint_addr, udi_errmsg *errmsg) {
-    breakpoint *bp = create_breakpoint((udi_address)breakpoint_addr);
+    breakpoint *bp = create_breakpoint((uint64_t)breakpoint_addr);
 
     if (bp == NULL) return NULL;
 
