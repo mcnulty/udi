@@ -6,11 +6,12 @@ the message.
 
 ## Requests
 
-A request is a single map data item with one guaranteed pair:
+A request is composed of two data items:
 
-- A key of `type` with an unsigned integer value that defines the type of the request.
+1. An unsigned integer value that defines the type of the request
+2. A map containing pairs that are defined by the type of the request
 
-The possible values are in the table below:
+The possible values for the request type are in the table below:
 
 | Request Type        | Value |
 | ------------        | ----- |
@@ -29,8 +30,6 @@ The possible values are in the table below:
 | thread resume       | 12    |
 | next instruction    | 13    |
 | single step         | 14    |
-
-Each request type defines further pairs to be included in the map.
 
 ## Responses
 

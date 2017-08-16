@@ -7,6 +7,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+/**
+ * UDI protocol types
+ *
+ * @file udi.h
+ */
+
 #ifndef _UDI_H
 #define _UDI_H 1
 
@@ -147,7 +153,7 @@ typedef enum
 /* request payloads */
 
 typedef struct continue_req_struct {
-    int sig;
+    uint32_t sig;
 } continue_req;
 
 typedef struct read_mem_req_struct {

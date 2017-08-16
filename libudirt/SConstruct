@@ -43,12 +43,14 @@ if "UDIS86_INC" in topenv:
 
 if "UDIS86_LIB" in topenv:
     topenv.Append(LIBPATH=[topenv["UDIS86_LIB"]])
+    topenv.Append(RPATH=[topenv["UDIS86_LIB"]])
 
 if "CBOR_INC" in topenv:
     topenv.Append(CPPPATH=[topenv["CBOR_INC"]])
 
 if "CBOR_LIB" in topenv:
     topenv.Append(LIBPATH=[topenv["CBOR_LIB"]])
+    topenv.Append(RPATH=[topenv["CBOR_LIB"]])
 
 # platform and architecture specific defines
 if udibuild.IsUnix():
@@ -82,11 +84,10 @@ Export('topenv')
 # subdirectories
 topenv.SConscript('#/libudicommon/SConscript', variant_dir='#/build/libudicommon', duplicate=False)
 topenv.SConscript('#/src/SConscript', variant_dir='#/build/src', duplicate=False)
-topenv.SConscript('#/tests/libuditest/SConscript', variant_dir='#/build/tests/libuditest', duplicate=False)
-topenv.SConscript('#/tests/src/SConscript', variant_dir='#/build/tests/src', duplicate=False)
+topenv.SConscript('#/tests/SConscript', variant_dir='#/build/tests', duplicate=False)
 topenv.SConscript('#/util/SConscript', variant_dir='#/build/util', duplicate=False)
 
 # default target
-topenv.Default('src', 'tests/src', 'util')
+topenv.Default('src', 'tests', 'util')
 
 # vim: ft=python

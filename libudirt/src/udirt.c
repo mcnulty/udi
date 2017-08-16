@@ -16,7 +16,7 @@
 #include "udirt.h"
 
 // constants
-const int BREAKPOINT_HASH_SIZE = 256;
+enum { BREAKPOINT_HASH_SIZE = 256 };
 
 const uint64_t UDI_SINGLE_THREAD_ID = 0xC0FEEABC;
 

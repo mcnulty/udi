@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015, UDI Contributors
+ * Copyright (c) 2011-2017, UDI Contributors
  * All rights reserved.
  * 
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -55,6 +55,7 @@ int write_to(udirt_fd fd, const uint8_t *src, size_t length);
 // UDI RT internal malloc
 void udi_free(void *ptr);
 void *udi_malloc(size_t length);
+void *udi_calloc(size_t count, size_t size);
 void *udi_realloc(void *ptr, size_t length);
 
 unsigned char *map_mem(size_t length);
@@ -72,52 +73,17 @@ typedef struct thread_struct thread;
 // request handling
 udi_version_e get_protocol_version();
 
-/** Request processed successfully */
-extern const int REQ_SUCCESS;
-
-/** Unrecoverable failure caused by environment/OS error */
-extern const int REQ_ERROR;
-
-/** Failure to process request due to invalid arguments */
-extern const int REQ_FAILURE;
-
 #define ERRMSG_SIZE 4096
 typedef struct {
     char msg[ERRMSG_SIZE];
     unsigned int size;
 } udi_errmsg;
 
-int handle_process_request(udirt_fd fd, udi_errmsg *errmsg);
+void init_req_handling();
+int handle_process_request(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg);
+int handle_thread_request(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg);
 
-// process request handlers
-int continue_handler(udirt_fd resp_fd, const continue_req *data, udi_errmsg *errmsg);
-int read_handler(udirt_fd resp_fd, const read_mem_req *data, udi_errmsg *errmsg);
-int write_handler(udirt_fd resp_fd, const write_mem_req *data, udi_errmsg *errmsg);
-int state_handler(udirt_fd resp_fd, udi_errmsg *errmsg);
-int init_handler(udirt_fd resp_fd, udi_errmsg *errmsg);
-int breakpoint_create_handler(udirt_fd resp_fd, const brkpt_req *data, udi_errmsg *errmsg);
-int breakpoint_install_handler(udirt_fd resp_fd, const brkpt_req *data, udi_errmsg *errmsg);
-int breakpoint_remove_handler(udirt_fd resp_fd, const brkpt_req *data, udi_errmsg *errmsg);
-int breakpoint_delete_handler(udirt_fd resp_fd, const brkpt_req *data, udi_errmsg *errmsg);
-
-int handle_thread_request(udirt_fd fd, thread *thr, udi_errmsg *errmsg);
-
-// thread request handlers
-int read_register_handler(udirt_fd resp_fd, thread *thr, const read_reg_req *data, udi_errmsg *errmsg);
-int write_register_handler(udirt_fd resp_fd, thread *thr, const write_reg_req *data, udi_errmsg *errmsg);
-int thr_state_handler(udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg);
-int next_instr_handler(udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg);
-int single_step_handler(udirt_fd resp_fd, thread *thr, const single_step_req *data, udi_errmsg *errmsg);
-
-// response handling
-int write_response(udi_response *response);
-int write_response_to_request(udi_response *response);
-int write_response_to_thr_request(thread *thr, udi_response *response);
-
-// event handling
-int write_event(udi_event_internal *event);
-
-// reading and writing debugee memory
+// reading and writing debuggee memory
 void *get_mem_access_addr();
 size_t get_mem_access_size();
 

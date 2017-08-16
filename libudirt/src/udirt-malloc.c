@@ -32,6 +32,11 @@ void *udi_malloc(size_t length) {
     return dlmalloc(length);
 }
 
+void *udi_calloc(size_t count, size_t size) {
+
+    return dlcalloc(count, size);
+}
+
 void *udi_realloc(void *ptr, size_t length) {
 
     return dlrealloc(ptr, length);
