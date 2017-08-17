@@ -45,12 +45,11 @@ The following is a list of response types and corresponding values:
 | valid         | 0     |
 | error         | 1     |
 
-When the response type is `error`, the third data item is a map with the following pairs:
+When the response type is `error`, the third data item is a map with the following pair:
 
-| Key   | Value            | Description      |
-| ----- | ---------------- | -------------    |
-| code  | unsigned integer | An error code    |
-| msg   | text string      | An error message |
+| Key   | Value                    | Description      |
+| ----- | ------------------------ | -------------    |
+| msg   | text string              | An error message |
 
 Responses with a response type of `valid` have a third data item that is a map. The pairs in
 the map are dictated by the type of the request.
@@ -61,7 +60,7 @@ An event is composed of three data items. The first two items always take on the
 form:
 
 1. An unsigned, 16-bit integer value that defines the type of the event.
-2. An unsigned, 64-bit integer value that identifies tid of the thread that triggered the event.
+2. An unsigned, 64-bit integer value that identifies the id of the thread that triggered the event.
 
 The following is a list of event types and corresponding values:
 
@@ -150,8 +149,8 @@ No outputs.
 
 **state**
 
-Retrieves the state of the threads in a process. It is an error to send this request to
-a process.
+Retrieves the state of the threads in a process. The output differs depending on whether this
+request was sent to the process or a single thread.
 
 _Inputs_
 
@@ -159,9 +158,16 @@ No inputs.
 
 _Outputs_
 
+If the recipient was the process:
+
 - `states`: An array of maps with the following keys:
   - `tid`: Thread id as an unsigned, 64-bit integer
   - `state`: Thread state as an unsigned, 16-bit integer
+
+If the recipient was the thread:
+
+- `tid`: Thread id as an unsigned, 64-bit integer
+- `state`: Thread state as an unsigned, 16-bit integer
 
 **init**
 

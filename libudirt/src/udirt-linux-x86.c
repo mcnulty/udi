@@ -21,11 +21,6 @@
 #include "udirt-x86.h"
 #include "udirt-posix-x86.h"
 
-/**
- * Given the context, rewinds the PC to account for a hit breakpoint
- *
- * @param context the context containing the current PC value
- */
 void rewind_pc(ucontext_t *context) {
     if (__WORDSIZE == 64) {
         context->uc_mcontext.gregs[X86_64_RIP_OFFSET]--;
@@ -48,18 +43,13 @@ void set_pc(ucontext_t *context, unsigned long pc) {
     }
 }
 
-/**
- * Given the context, gets the pc
- *
- * @param context the context containing the current PC value
- * 
- * @return the PC contained in the context
- */
-unsigned long get_pc(const ucontext_t *context) {
+
+uint64_t get_pc(const void *input) {
+    ucontext_t *context = (ucontext_t *)input;
     if (__WORDSIZE == 64) {
         return context->uc_mcontext.gregs[X86_64_RIP_OFFSET];
     }
-        
+
     return context->uc_mcontext.gregs[X86_EIP_OFFSET];
 }
 

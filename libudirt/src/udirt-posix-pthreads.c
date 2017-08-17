@@ -286,6 +286,38 @@ int is_thread_dead(thread *thr) {
     return thr->dead;
 }
 
+udi_thread_state_e get_thread_state(thread *thr) {
+    return thr->ts;
+}
+
+uint64_t get_thread_id(thread *thr) {
+    return thr->id;
+}
+
+int is_thread_context_valid(thread *thr) {
+    return thr->event_state.context_valid;
+}
+
+void *get_thread_context(thread *thr) {
+    return &thr->event_state.context;
+}
+
+int get_single_step(thread *thr) {
+    return thr->single_step;
+}
+
+void set_single_step(thread *thr, int single_step) {
+    thr->single_step = single_step;
+}
+
+breakpoint *get_single_step_breakpoint(thread *thr) {
+    return thr->single_step_bp;
+}
+
+void set_single_step_breakpoint(thread *thr, breakpoint *bp) {
+    thr->single_step_bp = bp;
+}
+
 /**
  * @return the current thread
  */

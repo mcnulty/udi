@@ -64,12 +64,10 @@ exit_result get_exit_argument(const ucontext_t *context, udi_errmsg *errmsg);
 extern void *UDI_RTLD_NEXT;
 
 // breakpoint handling
-udi_address get_trap_address(const ucontext_t *context);
-void rewind_pc(ucontext_t *context);
+uint64_t get_trap_address(const ucontext_t *context);
 
 // context modification
 void set_pc(ucontext_t *context, unsigned long pc);
-unsigned long get_pc(const ucontext_t *context);
 
 // signal handling
 

@@ -70,7 +70,8 @@ typedef struct {
 
 // threads
 typedef struct thread_struct thread;
-int thread_death_handshake(thread *thr, udi_errmsg *errmsg);
+typedef struct breakpoint_struct breakpoint;
+
 int get_num_threads();
 int get_multithread_capable();
 int get_multithreaded();
@@ -78,6 +79,16 @@ thread *get_thread_list();
 thread *get_next_thread(thread *thr);
 thread *get_current_thread();
 int is_thread_dead(thread *thr);
+udi_thread_state_e get_thread_state(thread *thr);
+uint64_t get_thread_id(thread *thr);
+int is_thread_context_valid(thread *thr);
+void *get_thread_context(thread *thr);
+int get_single_step(thread *thr);
+void set_single_step(thread *thr, int single_step);
+breakpoint *get_single_step_breakpoint(thread *thr);
+void set_single_step_breakpoint(thread *thr, breakpoint *bp);
+
+int thread_death_handshake(thread *thr, udi_errmsg *errmsg);
 
 // request handling
 udi_version_e get_protocol_version();
@@ -85,6 +96,7 @@ udi_version_e get_protocol_version();
 void init_req_handling();
 int handle_process_request(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg);
 int handle_thread_request(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg);
+int write_error_response(udirt_fd resp_fd, udi_request_type_e req_type, udi_errmsg *errmsg);
 
 // reading and writing debuggee memory
 void *get_mem_access_addr();
@@ -101,25 +113,58 @@ int write_memory(void *dest, const void *src, size_t num_bytes, udi_errmsg *errm
 
 const char *get_mem_errstr();
 
-// disassembly interface
-unsigned long get_ctf_successor(unsigned long pc, udi_errmsg *errmsg, void *context);
+// disassembly interface //
 
-// register interface
-int get_register(udi_arch_e arch, udi_register_e reg, udi_errmsg *errmsg, uint64_t *value, 
-        const void *context);
-int set_register(udi_arch_e arch, udi_register_e reg, udi_errmsg *errmsg, uint64_t value,
-        void *context);
+/**
+ * Gets the control flow successor for the instruction at the specified pc
+ *
+ * @param pc the program counter
+ * @param errmsg the error message populated on failure
+ * @param context the context from which registers can be retrieved
+ *
+ * @return the address of the control flow successor or 0 on error
+ */
+uint64_t get_ctf_successor(uint64_t pc, udi_errmsg *errmsg, const void *context);
+
+// register interface //
+
+int get_register(udi_arch_e arch,
+                 udi_register_e reg,
+                 udi_errmsg *errmsg,
+                 uint64_t *value,
+                 const void *context);
+int set_register(udi_arch_e arch,
+                 udi_register_e reg,
+                 udi_errmsg *errmsg,
+                 uint64_t value,
+                 void *context);
 int is_gp_register(udi_arch_e arch, udi_register_e reg);
 int is_fp_register(udi_arch_e arch, udi_register_e reg);
 
+/**
+ * Given the context, gets the pc
+ *
+ * @param context the context containing the current PC value
+ *
+ * @return the PC contained in the context
+ */
+uint64_t get_pc(const void *context);
+
+/**
+ * Given the context, rewinds the PC to account for a hit breakpoint
+ *
+ * @param context the context containing the current PC value
+ */
+void rewind_pc(void *context);
+
 // breakpoint handling
-typedef struct breakpoint_struct {
+struct breakpoint_struct {
     unsigned char saved_bytes[8];
     uint64_t address;
     unsigned char in_memory;
     thread *thread; // NULL if the breakpoint is set for all threads
     struct breakpoint_struct *next_breakpoint;
-} breakpoint;
+};
 
 breakpoint *create_breakpoint(uint64_t breakpoint_addr);
 
@@ -145,6 +190,26 @@ extern breakpoint *continue_bp;
  * @param sig_val the value of the signal to continue the process with
  */
 void post_continue_hook(uint32_t sig_val);
+
+// event reporting
+
+/**
+ * Handles the breakpoint event that occurred at the specified breakpoint
+ *
+ * @param thr the thread that hit the breakpoint
+ * @param bp the breakpoint that triggered the event
+ * @param context the context passed to the signal handler
+ * @param wait_for_request populated on success
+ * @param errmsg the error message populated on error
+ *
+ * @return the result of decoding the event
+ */
+int decode_breakpoint(thread *thr,
+                      breakpoint *bp,
+                      void *context,
+                      int **wait_for_request,
+                      udi_errmsg *errmsg);
+
 
 // error logging
 #define udi_printf(format, ...) \

@@ -269,16 +269,7 @@ unsigned long compute_target(ud_mnemonic_code_t mnemonic, struct ud_operand *op,
     return 0;
 }
 
-/**
- * Gets the control flow successor for the instruction at the specified pc
- *
- * @param pc the program counter
- * @param errmsg the error message populated on failure
- * @param context the context from which registers can be retrieved
- *
- * @return the address of the control flow successor or 0 on error
- */
-unsigned long get_ctf_successor(unsigned long pc, udi_errmsg *errmsg, void *context) {
+uint64_t get_ctf_successor(uint64_t pc, udi_errmsg *errmsg, void *context) {
 
     ud_t ud_obj;
 
