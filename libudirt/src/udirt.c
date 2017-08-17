@@ -256,7 +256,7 @@ int remove_breakpoint(breakpoint *bp, udi_errmsg *errmsg) {
     if ( result == 0 ) {
         bp->in_memory = 0;
     }
-    
+
     return result;
 }
 

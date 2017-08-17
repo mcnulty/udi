@@ -276,6 +276,17 @@ thread *get_thread_list() {
 }
 
 /**
+ * @return the next thread in the thread list or NULL if the `thr` is the last
+ */
+thread *get_next_thread(thread *thr) {
+    return thr->next_thread;
+}
+
+int is_thread_dead(thread *thr) {
+    return thr->dead;
+}
+
+/**
  * @return the current thread
  */
 thread *get_current_thread() {

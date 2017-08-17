@@ -70,22 +70,16 @@ static int pipe_write_failure = 0;
 
 // Continue handling
 static int pass_signal = 0;
-static breakpoint *continue_bp = NULL;
-
-// the last hit breakpoint, set with continue_bp
-static uint64_t last_bp_address = 0;
 
 // Used to force threads into the library signal handler
 extern int pthread_kill(pthread_t, int) __attribute__((weak));
 
 // unexported prototypes
-static int thread_death_handshake(thread *thr, udi_errmsg *errmsg);
 static int remove_udi_filesystem();
 
 // request handling
 typedef int (*request_handler)(udi_request *, udi_errmsg *);
 
-int continue_handler(udi_request *req, udi_errmsg *);
 int read_handler(udi_request *req, udi_errmsg *);
 int write_handler(udi_request *req, udi_errmsg *);
 int state_handler(udi_request *req, udi_errmsg *);
@@ -98,7 +92,6 @@ int invalid_handler(udi_request *req, udi_errmsg *errmsg);
 
 static
 request_handler req_handlers[] = {
-    continue_handler,
     read_handler,
     write_handler,
     invalid_handler,
@@ -593,66 +586,22 @@ int send_response_thr(thread *thr, udi_response *resp, udi_errmsg *errmsg) {
     return result;
 }
 
-/**
- * Handles a process continue request
- *
- * Standard request handler interface
- */
-int continue_handler(udi_request *req, udi_errmsg *errmsg) {
-    uint32_t sig_val;
-    if (unpack_request_continue(req, &sig_val, errmsg)) {
-        return REQ_FAILURE;
-    }
+void post_continue_hook(uint32_t sig_val) {
+    if (!exiting) {
+        pass_signal = sig_val;
+        kill(getpid(), sig_val);
 
-    // special handling for a continue from a breakpoint
-    if ( continue_bp != NULL ) {
-        int install_result = install_breakpoint(continue_bp, errmsg);
-        if ( install_result != 0 ) {
-            udi_printf("failed to install breakpoint for continue at 0x%"PRIx64"\n",
-                    continue_bp->address);
-            if ( install_result < REQ_ERROR ) {
-                install_result = REQ_ERROR;
-            }
-        }else{
-            udi_printf("installed breakpoint at 0x%"PRIx64" for continue from breakpoint\n",
-                    continue_bp->address);
-        }
-    }
-
-    if (get_multithread_capable()) {
-        thread *cur_thr = get_thread_list();
-        while (cur_thr != NULL) {
-            thread *next_thread = cur_thr->next_thread;
-            if (cur_thr->dead) {
-                if ( thread_death_handshake(cur_thr, errmsg) ) {
-                    return REQ_ERROR;
-                }
-            }
-            cur_thr= next_thread;
-        }
-    }
-    
-    int result = send_valid_response(UDI_REQ_CONTINUE);
-
-    if ( result == REQ_SUCCESS ) {
-        if (!exiting) {
-            pass_signal = sig_val;
-            kill(getpid(), sig_val);
-
-            udi_printf("continuing with signal %d\n", sig_val);
-        }else{
-            int remove_result = remove_udi_filesystem();
-            if (remove_result != 0) {
-                if (remove_result > 0) {
-                    udi_printf("failed to cleanup udi filesystem: %s\n", strerror(remove_result));
-                }else{
-                    udi_printf("failed to cleanup udi filesystem\n");
-                }
+        udi_printf("continuing with signal %d\n", sig_val);
+    }else{
+        int remove_result = remove_udi_filesystem();
+        if (remove_result != 0) {
+            if (remove_result > 0) {
+                udi_printf("failed to cleanup udi filesystem: %s\n", strerror(remove_result));
+            }else{
+                udi_printf("failed to cleanup udi filesystem\n");
             }
         }
     }
-
-    return result;
 }
 
 /**

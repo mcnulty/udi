@@ -22,10 +22,10 @@
 extern "C" {
 #endif
 
-// Useful macro
+// Macros //
 #define member_sizeof(s,m) ( sizeof( ((s *)0)->m ) )
 
-// global variables
+// global variables //
 
 // platform independent variables and constants
 extern const char * const UDI_ROOT_DIR_ENV;
@@ -47,8 +47,6 @@ extern char *UDI_ROOT_DIR;
 
 // General platform-specific functions
 void udi_abort(const char *file, unsigned int line);
-int read_all(int fd, void *dest, size_t length);
-int write_all(int fd, void *src, size_t length);
 int read_from(udirt_fd fd, uint8_t *dst, size_t length);
 int write_to(udirt_fd fd, const uint8_t *src, size_t length);
 
@@ -58,26 +56,31 @@ void *udi_malloc(size_t length);
 void *udi_calloc(size_t count, size_t size);
 void *udi_realloc(void *ptr, size_t length);
 
-unsigned char *map_mem(size_t length);
-int unmap_mem(void *addr, size_t length);
-
 // helper functions
 const char *request_type_str(udi_request_type_e req_type); 
 const char *event_type_str(udi_event_type_e event_type);
 const char *arch_str(udi_arch_e arch);
 const char *register_str(udi_register_e reg);
 
-// opaque (at this level) thread handle
-typedef struct thread_struct thread;
-
-// request handling
-udi_version_e get_protocol_version();
-
 #define ERRMSG_SIZE 4096
 typedef struct {
     char msg[ERRMSG_SIZE];
     unsigned int size;
 } udi_errmsg;
+
+// threads
+typedef struct thread_struct thread;
+int thread_death_handshake(thread *thr, udi_errmsg *errmsg);
+int get_num_threads();
+int get_multithread_capable();
+int get_multithreaded();
+thread *get_thread_list();
+thread *get_next_thread(thread *thr);
+thread *get_current_thread();
+int is_thread_dead(thread *thr);
+
+// request handling
+udi_version_e get_protocol_version();
 
 void init_req_handling();
 int handle_process_request(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg);
@@ -130,6 +133,18 @@ breakpoint *find_breakpoint(uint64_t breakpoint_addr);
 int write_breakpoint_instruction(breakpoint *bp, udi_errmsg *errmsg);
 int write_saved_bytes(breakpoint *bp, udi_errmsg *errmsg);
 udi_arch_e get_architecture();
+
+// continue handling //
+
+/** The breakpoint used to single step from a user breakpoint */
+extern breakpoint *continue_bp;
+
+/**
+ * A hook ran after the continue response has been sent
+ *
+ * @param sig_val the value of the signal to continue the process with
+ */
+void post_continue_hook(uint32_t sig_val);
 
 // error logging
 #define udi_printf(format, ...) \

@@ -8,7 +8,7 @@ the message.
 
 A request is composed of two data items:
 
-1. An unsigned integer value that defines the type of the request
+1. An unsigned, 16-bit integer value that defines the type of the request
 2. A map containing pairs that are defined by the type of the request
 
 The possible values for the request type are in the table below:
@@ -35,8 +35,8 @@ The possible values for the request type are in the table below:
 
 A response is composed of three data items. The first two items always take on the following form:
 
-1. An unsigned integer value that defines the type of the response 
-2. An unsigned integer value that defines the type of the corresponding request
+1. An unsigned, 16-bit integer value that defines the type of the response
+2. An unsigned, 16-bit integer value that defines the type of the corresponding request
 
 The following is a list of response types and corresponding values:
 
@@ -48,7 +48,7 @@ The following is a list of response types and corresponding values:
 When the response type is `error`, the third data item is a map with the following pairs:
 
 | Key   | Value            | Description      |
-| ----- | ---------------- | -------------    | 
+| ----- | ---------------- | -------------    |
 | code  | unsigned integer | An error code    |
 | msg   | text string      | An error message |
 
@@ -60,8 +60,8 @@ the map are dictated by the type of the request.
 An event is composed of three data items. The first two items always take on the following
 form:
 
-1. An unsigned integer value that defines the type of the event.
-2. An unsigned integer value that identifies tid of the thread that triggered the event.
+1. An unsigned, 16-bit integer value that defines the type of the event.
+2. An unsigned, 64-bit integer value that identifies tid of the thread that triggered the event.
 
 The following is a list of event types and corresponding values:
 
@@ -89,7 +89,7 @@ request to a thread.
 
 _Inputs_
 
-- `sig`: The signal to pass to the debuggee (0 for no signal) as an unsigned integer.
+- `sig`: The signal to pass to the debuggee (0 for no signal) as an unsigned, 32-bit integer.
 
 _Outputs_
 
@@ -101,8 +101,8 @@ Reads debuggee memory. It is an error to send this request to a thread.
 
 _Inputs_
 
-- `addr`: The virtual memory address to read from as an unsigned integer
-- `len`: The length of bytes to read as an unsigned integer
+- `addr`: The virtual memory address to read from as an unsigned, 64-bit integer
+- `len`: The length of bytes to read as an unsigned, 32-bit integer
 
 _Outputs_
 
@@ -114,7 +114,7 @@ Writes debuggee memory. It is an error to send this request to a thread.
 
 _Inputs_
 
-- `addr`: The virtual memory address to write to as an unsigned integer
+- `addr`: The virtual memory address to write to as an unsigned, 64-bit integer
 - `data`: The data to write as a byte string.
 
 _Outputs_
@@ -128,11 +128,11 @@ a process.
 
 _Inputs_
 
-- `reg`: The register to read as an unsigned integer
+- `reg`: The register to read as an unsigned, 16-bit integer
 
 _Outputs_
 
-- `value`: The register value as an unsigned integer
+- `value`: The register value as an unsigned, 64-bit integer
 
 **write register**
 
@@ -141,8 +141,8 @@ a process.
 
 _Inputs_
 
-- `reg`: The register to write as an unsigned integer
-- `value`: The value to write as an unsigned integer
+- `reg`: The register to write as an unsigned, 16-bit integer
+- `value`: The value to write as an unsigned, 64-bit integer
 
 _Outputs_
 
@@ -160,8 +160,8 @@ No inputs.
 _Outputs_
 
 - `states`: An array of maps with the following keys:
-  - `tid`: Thread id as an unsigned integer
-  - `state`: Thread state as an unsigned integer
+  - `tid`: Thread id as an unsigned, 64-bit integer
+  - `state`: Thread state as an unsigned, 16-bit integer
 
 **init**
 
@@ -173,10 +173,10 @@ No inputs.
 
 _Outputs_
 
-- `v`: The UDI protocol version as an unsigned integer
-- `arch`: The architecture of the debuggee as an unsigned integer
-- `mt`: A non-zero unsigned integer if the debuggee is multithread capable
-- `tid`: The tid for the initial thread as an unsigned integer
+- `v`: The UDI protocol version as an unsigned, 32-bit integer
+- `arch`: The architecture of the debuggee as an unsigned, 16-bit integer
+- `mt`: `true` when the debuggee is multithread capable
+- `tid`: The tid for the initial thread as an unsigned, 64-bit integer
 
 **create breakpoint**
 
@@ -184,7 +184,7 @@ Creates a breakpoint
 
 _Inputs_
 
-- `addr`: The address of the breakpoint as an unsigned integer
+- `addr`: The address of the breakpoint as an unsigned, 64-bit integer
 
 _Outputs_
 
@@ -196,7 +196,7 @@ Install the breakpoint into memory.
 
 _Inputs_
 
-- `addr`: The address of the breakpoint as an unsigned integer
+- `addr`: The address of the breakpoint as an unsigned, 64-bit integer
 
 _Outputs_
 
@@ -208,7 +208,7 @@ Removes the breakpoint from memory.
 
 _Inputs_
 
-- `addr`: The address of the breakpoint as an unsigned integer
+- `addr`: The address of the breakpoint as an unsigned, 64-bit integer
 
 _Outputs_
 
@@ -220,7 +220,7 @@ Delete the breakpoint
 
 _Inputs_
 
-- `addr`: The address of the breakpoint as an unsigned integer
+- `addr`: The address of the breakpoint as an unsigned, 64-bit integer
 
 _Outputs_
 
@@ -260,7 +260,7 @@ No inputs.
 
 _Outputs_
 
-- `addr`: The address of the next instruction as an unsigned integer
+- `addr`: The address of the next instruction as an unsigned, 64-bit integer
 
 **single step**
 
@@ -269,11 +269,11 @@ a process.
 
 _Inputs_
 
-- `value`: A non-zero unsigned integer when single stepping to be enabled for the thread
+- `value`: `true` when single stepping is to be enabled for the thread
 
 _Outputs_
 
-- `value`: The previous setting as an unsigned integer
+- `value`: The previous setting as a boolean
 
 ## Event Data
 
@@ -283,16 +283,16 @@ _Outputs_
 
 **signal**
 
-- `addr`: The virtual address where the signal occurred as an unsigned integer
+- `addr`: The virtual address where the signal occurred as an unsigned, 64-bit integer
 - `sig`: The signal number as an unsigned integer
 
 **breakpoint**
 
-- `addr`: The virtual address where the breakpoint occurred as an unsigned integer
+- `addr`: The virtual address where the breakpoint occurred as an unsigned, 64-bit integer
 
 **thread create**
 
-- `tid`: The thread id for the newly created thread as an unsigned integer
+- `tid`: The thread id for the newly created thread as an unsigned, 64-bit integer
 
 **thread death**
 
@@ -300,11 +300,11 @@ No data.
 
 **process exit**
 
-- `code`: The exit code from the process exit as an unsigned integer.
+- `code`: The exit code from the process exit as an unsigned, 64-bit integer.
 
 **process fork**
 
-- `pid`: The process id for the new process as an unsigned integer.
+- `pid`: The process id for the new process as an unsigned, 64-bit integer.
 
 **process exec**
 

@@ -114,14 +114,9 @@ struct thread_struct {
     struct thread_struct *next_thread;
 };
 
-int get_num_threads();
-int get_multithread_capable();
-int get_multithreaded();
 int setsigmask(int how, const sigset_t *new_set, sigset_t *old_set);
-thread *get_thread_list();
 uint64_t get_user_thread_id();
 uint32_t get_kernel_thread_id();
-thread *get_current_thread();
 
 // thread synchronization
 typedef struct udi_barrier_struct {

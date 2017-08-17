@@ -90,4 +90,6 @@ topenv.SConscript('#/util/SConscript', variant_dir='#/build/util', duplicate=Fal
 # default target
 topenv.Default('src', 'tests', 'util')
 
+topenv.Clean('src', 'build')
+
 # vim: ft=python
