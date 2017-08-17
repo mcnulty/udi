@@ -202,10 +202,10 @@ int install_event_breakpoints(udi_errmsg *errmsg) {
  * @param context the context for the breakpoint
  * @param errmsg the error message populated on error
  *
- * @return the information extracted about the exit event
+ * @return the result
  */
 static
-event_result handle_exit_breakpoint(const ucontext_t *context, udi_errmsg *errmsg) {
+int handle_exit_breakpoint(const ucontext_t *context, udi_errmsg *errmsg) {
 
     event_result result;
     result.failure = 0;
@@ -369,11 +369,6 @@ void (*signal(int signum, void (*handler)(int)) )(int) {
     return old.sa_handler;
 }
 
-/**
- * @param bp the breakpoint
- *
- * @return non-zero if the specified breakpoint is a event breakpoint; zero otherwise
- */
 int is_event_breakpoint(breakpoint *bp) {
     if (bp == exit_bp) {
         return 1;
@@ -382,14 +377,10 @@ int is_event_breakpoint(breakpoint *bp) {
     return is_thread_event_breakpoint(bp);
 }
 
-/**
- * Handles the specified event breakpoint
- *
- * @param bp the breakpoint
- * @param context the context
- * @param errmsg the error message populated on error
- */
-event_result handle_event_breakpoint(breakpoint *bp, const ucontext_t *context, udi_errmsg *errmsg) {
+int handle_event_breakpoint(breakpoint *bp, const void *in_context, udi_errmsg *errmsg) {
+
+    const ucontext_t *context = (const ucontext_t *)in_context;
+
     if (bp == exit_bp) {
         return handle_exit_breakpoint(context, errmsg);
     }

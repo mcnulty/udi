@@ -8,7 +8,7 @@
  */
 
 #include "udirt-malloc.c"
-#include "udirt-req.c"
+#include "udirt-msg.c"
 
 #include "test-lib.h"
 #include "mock-lib.h"

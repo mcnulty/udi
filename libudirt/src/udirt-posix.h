@@ -24,12 +24,6 @@
 extern "C" {
 #endif
 
-// event handling
-typedef struct event_result_struct {
-    int failure;
-    int wait_for_request;
-} event_result;
-
 // syscall events
 typedef int (*sigaction_type)(int, const struct sigaction *, 
         struct sigaction *);
@@ -43,8 +37,6 @@ extern execve_type real_execve;
 
 int locate_wrapper_functions(udi_errmsg *errmsg);
 int install_event_breakpoints(udi_errmsg *errmsg);
-int is_event_breakpoint(breakpoint *bp);
-event_result handle_event_breakpoint(breakpoint *bp, const ucontext_t *context, udi_errmsg *errmsg);
 
 int wait_and_execute_command(udi_errmsg *errmsg, thread **thr);
 
@@ -52,13 +44,20 @@ int wait_and_execute_command(udi_errmsg *errmsg, thread **thr);
 void reinit_udi_rt();
 
 // exit event handling
-extern int exiting; // indicates that the process will exit on the next continue request
-typedef struct exit_result_struct {
-    int status;
-    int failure;
-} exit_result;
 
-exit_result get_exit_argument(const ucontext_t *context, udi_errmsg *errmsg);
+/** indicates that the process will exit on the next continue request */
+extern int exiting;
+
+/**
+ * Determines the argument to the exit function, given the context at which the exit breakpoint
+ * was hit
+ *
+ * @param context the current context
+ * @param errmsg the error message populated by the memory access
+ *
+ * @return the result
+ */
+int get_exit_argument(const ucontext_t *context, udi_errmsg *errmsg);
 
 // library wrapping
 extern void *UDI_RTLD_NEXT;
@@ -134,8 +133,9 @@ int initialize_pthreads_support(udi_errmsg *errmsg);
 
 int install_thread_event_breakpoints(udi_errmsg *errmsg);
 int is_thread_event_breakpoint(breakpoint *bp);
-event_result handle_thread_event_breakpoint(breakpoint *bp, const ucontext_t *context,
-        udi_errmsg *errmsg);
+int handle_thread_event_breakpoint(breakpoint *bp,
+                                   const ucontext_t *context,
+                                   udi_errmsg *errmsg);
 
 thread *create_initial_thread();
 int thread_create_callback(thread *thr, udi_errmsg *errmsg);

@@ -15,7 +15,7 @@ read_test_req_srcs = [
 ]
 
 read_test_req_bin = bin_env.Program('read-test-req', read_test_req_srcs)
-bin_env.Depends(read_test_req_bin, '#/src/udirt-req.c')
+bin_env.Depends(read_test_req_bin, '#/src/udirt-msg.c')
 bin_env.Depends(read_test_req_bin, '#/src/udirt-malloc.c')
 
 tests = [

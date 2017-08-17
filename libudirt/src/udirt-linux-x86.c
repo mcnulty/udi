@@ -85,16 +85,10 @@ udi_address get_trap_address(const ucontext_t *context) {
     return (udi_address)(unsigned long)context->uc_mcontext.gregs[X86_EIP_OFFSET] - 1;
 }
 
-/**
- * Determines the argument to the exit function, given the context at which the exit breakpoint
- * was hit
- *
- * @param context the current context
- * @param errmsg the error message populated by the memory access
- *
- * @return the exit result
- */
-exit_result get_exit_argument(const ucontext_t *context, udi_errmsg *errmsg) {
+int get_exit_argument(const ucontext_t *context,
+                      int *status,
+                      udi_errmsg *errmsg)
+{
     exit_result ret;
     ret.failure = 0;
 
@@ -117,10 +111,10 @@ exit_result get_exit_argument(const ucontext_t *context, udi_errmsg *errmsg) {
         int read_result = read_memory(&(ret.status), (const void *)sp, sizeof(int), errmsg);
         if ( read_result != 0 ) {
             udi_printf("failed to retrieve exit status off of the stack at 0x%lx\n",
-                    sp);
+                       sp);
             snprintf(errmsg->msg, errmsg->size,
-                    "failed to retrieve exit status off of the stack at 0x%lx: %s",
-                    sp, get_mem_errstr());
+                     "failed to retrieve exit status off of the stack at 0x%lx: %s",
+                     sp, get_mem_errstr());
             ret.failure = read_result;
         }
     }

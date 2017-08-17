@@ -26,6 +26,10 @@ const char * const RESPONSE_FILE_NAME = "response";
 const char * const EVENTS_FILE_NAME = "events";
 const char * const UDI_DEBUG_ENV = "UDI_DEBUG";
 
+const int RESULT_SUCCESS = 0;
+const int RESULT_ERROR = -1;
+const int RESULT_FAILURE = -2;
+
  // not enabled until initialization complete
 char *UDI_ROOT_DIR;
 int udi_debug_on = 0;

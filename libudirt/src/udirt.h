@@ -62,6 +62,17 @@ const char *event_type_str(udi_event_type_e event_type);
 const char *arch_str(udi_arch_e arch);
 const char *register_str(udi_register_e reg);
 
+// error handling
+
+/** Operation successful */
+extern const int RESULT_SUCCESS;
+
+/** Unrecoverable failure caused by environment/OS error */
+extern const int RESULT_ERROR;
+
+/** Failure to process request due to invalid arguments */
+extern const int RESULT_FAILURE;
+
 #define ERRMSG_SIZE 4096
 typedef struct {
     char msg[ERRMSG_SIZE];
@@ -83,7 +94,7 @@ udi_thread_state_e get_thread_state(thread *thr);
 uint64_t get_thread_id(thread *thr);
 int is_thread_context_valid(thread *thr);
 void *get_thread_context(thread *thr);
-int get_single_step(thread *thr);
+int is_single_step(thread *thr);
 void set_single_step(thread *thr, int single_step);
 breakpoint *get_single_step_breakpoint(thread *thr);
 void set_single_step_breakpoint(thread *thr, breakpoint *bp);
@@ -94,8 +105,15 @@ int thread_death_handshake(thread *thr, udi_errmsg *errmsg);
 udi_version_e get_protocol_version();
 
 void init_req_handling();
-int handle_process_request(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg);
-int handle_thread_request(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg);
+int handle_process_request(udirt_fd req_fd,
+                           udirt_fd resp_fd,
+                           udi_request_type_e *type,
+                           udi_errmsg *errmsg);
+int handle_thread_request(udirt_fd req_fd,
+                          udirt_fd resp_fd,
+                          thread *thr,
+                          udi_request_type_e *type,
+                          udi_errmsg *errmsg);
 int write_error_response(udirt_fd resp_fd, udi_request_type_e req_type, udi_errmsg *errmsg);
 
 // reading and writing debuggee memory
@@ -193,6 +211,8 @@ void post_continue_hook(uint32_t sig_val);
 
 // event reporting
 
+extern udirt_fd events_handle;
+
 /**
  * Handles the breakpoint event that occurred at the specified breakpoint
  *
@@ -207,11 +227,46 @@ void post_continue_hook(uint32_t sig_val);
 int decode_breakpoint(thread *thr,
                       breakpoint *bp,
                       void *context,
-                      int **wait_for_request,
+                      int *wait_for_request,
                       udi_errmsg *errmsg);
 
+/**
+ * @param bp the breakpoint
+ *
+ * @return non-zero if the specified breakpoint is a event breakpoint; zero otherwise
+ */
+int is_event_breakpoint(breakpoint *bp);
 
-// error logging
+/**
+ * Handles the specified event breakpoint
+ *
+ * @param bp the breakpoint
+ * @param context the context
+ * @param errmsg the error message populated on error
+ */
+int handle_event_breakpoint(breakpoint *bp,
+                            const void *context,
+                            udi_errmsg *errmsg);
+
+/**
+ * Handles an unknown event occurring
+ *
+ * @param tid the thread that received the event
+ *
+ * @return the result
+ */
+int handle_unknown_event(uint64_t tid);
+
+/**
+ * Handles an error event
+ *
+ * @param tid the thread that received the event
+ *
+ * @return the result
+ */
+int handle_error_event(uint64_t tid, udi_errmsg *errmsg);
+
+// logging
 #define udi_printf(format, ...) \
     do {\
         if( udi_debug_on ) {\
