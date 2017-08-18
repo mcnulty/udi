@@ -82,7 +82,6 @@ vars.Save('.udirt.config', topenv)
 Export('topenv')
 
 # subdirectories
-topenv.SConscript('#/libudicommon/SConscript', variant_dir='#/build/libudicommon', duplicate=False)
 topenv.SConscript('#/src/SConscript', variant_dir='#/build/src', duplicate=False)
 topenv.SConscript('#/tests/SConscript', variant_dir='#/build/tests', duplicate=False)
 topenv.SConscript('#/util/SConscript', variant_dir='#/build/util', duplicate=False)
