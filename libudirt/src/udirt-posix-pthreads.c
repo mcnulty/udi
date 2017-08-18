@@ -302,7 +302,7 @@ void *get_thread_context(thread *thr) {
     return &thr->event_state.context;
 }
 
-int get_single_step(thread *thr) {
+int is_single_step(thread *thr) {
     return thr->single_step;
 }
 
@@ -355,16 +355,14 @@ thread *create_initial_thread() {
  * @param errmsg_size the maximum size of the error message
  */
 static
-event_result handle_thread_create(const ucontext_t *context, udi_errmsg *errmsg) {
-    event_result result;
-    result.wait_for_request = 1;
-    result.failure = 0;
+int handle_thread_create(const ucontext_t *context, udi_errmsg *errmsg) {
 
+    int result;
     uint64_t tid;
     do {
         tid = initialize_thread(errmsg);
         if ( tid == 0 ) {
-            result.failure = 1;
+            result = RESULT_ERROR;
             break;
         }
 
@@ -372,31 +370,30 @@ event_result handle_thread_create(const ucontext_t *context, udi_errmsg *errmsg)
 
         thread *thr = create_thread(tid);
         if (thr == NULL) {
-            result.failure = 1;
+            result = RESULT_ERROR;
             break;
         }
 
         thread *creator_thr = get_current_thread();
         if ( creator_thr == NULL ) {
-            result.failure = 1;
+            result = RESULT_ERROR;
             break;
         }
 
         if ( thread_create_callback(thr, errmsg) != 0 ) {
-            result.failure = 1;
+            result = RESULT_ERROR;
             break;
         }
 
-        udi_event_internal event = create_event_thread_create(creator_thr->id, tid);
-        result.failure = write_event(&event);
-
-        if ( thread_create_handshake(thr, errmsg) != 0 ) {
-            result.failure = 1;
+        result = handle_thread_create_event(creator_thr->id, tid, errmsg);
+        if (result != RESULT_SUCCESS) {
             break;
         }
+
+        result = thread_create_handshake(thr, errmsg);
     }while(0);
 
-    if ( result.failure ) {
+    if ( result != RESULT_SUCCESS ) {
         udi_printf("failed to report thread create of 0x%"PRIx64"\n", tid);
     }
 
@@ -410,51 +407,43 @@ event_result handle_thread_create(const ucontext_t *context, udi_errmsg *errmsg)
  * @param errmsg the error message populated on error
  */
 static
-event_result handle_thread_death(const ucontext_t *context, udi_errmsg *errmsg) {
-    event_result result;
-    result.wait_for_request = 1;
-    result.failure = 0;
+int handle_thread_death(const ucontext_t *context, udi_errmsg *errmsg) {
 
+    int result;
     uint64_t tid;
     do {
         tid = finalize_thread(errmsg);
-
         if (tid == 0) {
-            result.failure = 1;
+            result = RESULT_ERROR;
             break;
         }
-    
+
         udi_printf("thread death event for 0x%"PRIx64"\n", tid);
 
         thread *thr = find_thread(tid);
         if (thr == NULL) {
-            result.failure = 1;
+            result = RESULT_ERROR;
             break;
         }
 
         if ( thread_death_callback(thr, errmsg) != 0 ) {
-            result.failure = 1;
+            result = RESULT_ERROR;
             break;
         }
 
-        udi_event_internal event = create_event_thread_death(tid);
-        result.failure = write_event(&event);
+        result = handle_thread_death_event(tid, errmsg);
     }while(0);
 
-    if ( result.failure ) {
+    if ( result != RESULT_SUCCESS ) {
         udi_printf("failed to report thread death of 0x%"PRIx64"\n", tid);
     }
 
     return result;
 }
 
-/**
- * @param bp the breakpoint
- * @param context the context
- * @param errmsg the error message populated on error
- */
-event_result handle_thread_event_breakpoint(breakpoint *bp, const ucontext_t *context,
-        udi_errmsg *errmsg)
+int handle_thread_event_breakpoint(breakpoint *bp,
+                                   const ucontext_t *context,
+                                   udi_errmsg *errmsg)
 {
     if (bp == thread_create_bp) {
         return handle_thread_create(context, errmsg);
@@ -464,13 +453,9 @@ event_result handle_thread_event_breakpoint(breakpoint *bp, const ucontext_t *co
         return handle_thread_death(context, errmsg);
     }
 
-    event_result err_result;
-    err_result.failure = 1;
-    err_result.wait_for_request = 0;
-
-    snprintf(errmsg->msg, errmsg->size, "failed to handle the thread event at 0x%"PRIx64,
-            bp->address);
-    udi_printf("%s\n", errmsg->msg); 
-
-    return err_result;
+    snprintf(errmsg->msg,
+             errmsg->size,
+             "failed to handle unknown thread event at 0x%"PRIx64,
+             bp->address);
+    return RESULT_SUCCESS;
 }

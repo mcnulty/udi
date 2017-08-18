@@ -19,6 +19,7 @@ void (*signal(int signum, void (*handler)(int)) )(int) __asm__ ("" "signal");
 
 #include <inttypes.h>
 #include <errno.h>
+#include <stdlib.h>
 
 // Signal handling
 int signals[] = {
@@ -67,38 +68,6 @@ signal_type real_signal;
 
 // event breakpoints
 static breakpoint *exit_bp = NULL;
-
-/**
- * Waits and executes a command -- used by syscall wrappers
- */
-static
-void wait_and_execute_command_with_response() {
-    udi_errmsg errmsg;
-    errmsg.size = ERRMSG_SIZE;
-    errmsg.msg[ERRMSG_SIZE-1] = '\0';
-
-    thread *request_thr;
-    int req_result = wait_and_execute_command(&errmsg, &request_thr);
-
-    if ( req_result != REQ_SUCCESS ) {
-        if ( req_result > REQ_SUCCESS ) {
-            strncpy(errmsg.msg, strerror(req_result), errmsg.size-1);
-        }
-
-        udi_printf("failed to process command: %s\n", errmsg.msg);
-
-        udi_response resp = create_response_error(&errmsg);
-        if ( resp.packed_data != NULL ) {
-            // explicitly ignore errors
-            if (request_thr != NULL) {
-                write_response_to_thr_request(request_thr, &resp);
-            }else{
-                write_response(&resp);
-            }
-            udi_free(resp.packed_data);
-        }
-    }
-}
 
 /**
  * Use dynamic loader to locate functions that are wrapped by library
@@ -167,11 +136,11 @@ int locate_wrapper_functions(udi_errmsg *errmsg) {
  */
 int install_event_breakpoints(udi_errmsg *errmsg) {
     int errnum = 0;
-    
+
     do {
-        // Exit cannot be wrappped because Linux executables can call it
+        // Exit cannot be wrapped because Linux executables can call it
         // directly and do not pass through the PLT
-        exit_bp = create_breakpoint((udi_address)(unsigned long)exit);
+        exit_bp = create_breakpoint((uint64_t)exit);
         if ( exit_bp == NULL ) {
             udi_printf("%s\n", "failed to create exit breakpoint");
             errnum = -1;
@@ -207,35 +176,17 @@ int install_event_breakpoints(udi_errmsg *errmsg) {
 static
 int handle_exit_breakpoint(const ucontext_t *context, udi_errmsg *errmsg) {
 
-    event_result result;
-    result.failure = 0;
-    result.wait_for_request = 1;
-
-    exit_result exit_result = get_exit_argument(context, errmsg);
-
-    if ( exit_result.failure ) {
-        result.failure = exit_result.failure;
+    int status = 0;
+    int result = get_exit_argument(context, &status, errmsg);
+    if ( result != RESULT_SUCCESS ) {
         return result;
     }
 
-    udi_printf("exit entered with status %d\n", exit_result.status);
+    udi_printf("exit entered with status %d\n", status);
     exiting = 1;
-
-    // create the event
-    udi_event_internal exit_event = create_event_exit(get_user_thread_id(), exit_result.status);
-    do {
-        if ( exit_event.packed_data == NULL ) {
-            result.failure = 1;
-            break;
-        }
-
-        result.failure = write_event(&exit_event);
-
-        udi_free(exit_event.packed_data);
-    }while(0);
-
-    if ( result.failure ) {
-        udi_printf("failed to report exit status of %d\n", exit_result.status);
+    result = handle_exit_event(get_user_thread_id(), status, errmsg);
+    if ( result != RESULT_SUCCESS ) {
+        udi_printf("failed to report exit status of %d\n", status);
     }
     return result;
 }
@@ -249,13 +200,13 @@ pid_t fork() {
 
     pid_t child = real_fork();
     if ( child == 0 ) {
-        reinit_udi_rt();
+        reinit_udirt();
     }else{
         uint64_t thread_id = get_user_thread_id();
 
         udi_printf(">>> fork entry for 0x%"PRIx64"/%u\n",
-                get_user_thread_id(),
-                get_kernel_thread_id());
+                   get_user_thread_id(),
+                   get_kernel_thread_id());
 
         // Need to continue waiting until this thread owns the control of the process
         int block_result = 1;
@@ -268,18 +219,24 @@ pid_t fork() {
             }
         }
 
-        // create the event
-        udi_event_internal event = create_event_fork(thread_id, child);
-        do {
-            int errnum = write_event(&event);
-            if ( errnum != 0 ) {
-                udi_printf("failed to write fork event: %s\n", strerror(errnum));
-                errno = EAGAIN;
-                return -1;
-            }
-        }while(0);
+        udi_errmsg errmsg;
+        errmsg.size = ERRMSG_SIZE;
+        errmsg.msg[ERRMSG_SIZE-1] = '\0';
 
-        wait_and_execute_command_with_response();
+        int result = handle_fork_event(thread_id, child, &errmsg);
+        if (result != RESULT_SUCCESS) {
+            udi_printf("failed to report fork event: %s\n", errmsg.msg);
+            errno = EAGAIN;
+            return -1;
+        }
+
+        thread *thr = NULL;
+        result = wait_and_execute_command(&errmsg, &thr);
+        if (result == RESULT_ERROR) {
+            udi_printf("failed to execute command after fork: %s\n", errmsg.msg);
+            errno = EAGAIN;
+            return -1;
+        }
 
         int release_result = release_other_threads();
         if ( release_result != 0 ) {
@@ -384,6 +341,7 @@ int handle_event_breakpoint(breakpoint *bp, const void *in_context, udi_errmsg *
     if (bp == exit_bp) {
         return handle_exit_breakpoint(context, errmsg);
     }
+
 
     return handle_thread_event_breakpoint(bp, context, errmsg);
 }

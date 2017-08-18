@@ -121,7 +121,7 @@ static int OF = 0x800;
  * @return non-zero if the condition is met; 0 otherwise
  */
 static
-int ctf_condition_met(ud_mnemonic_code_t mnemonic, void *context) {
+int ctf_condition_met(ud_mnemonic_code_t mnemonic, const void *context) {
     int result = 0;
 
     unsigned long flags = get_flags(context);
@@ -214,8 +214,11 @@ int ctf_condition_met(ud_mnemonic_code_t mnemonic, void *context) {
  * @return the target or 0 on failure
  */
 static
-unsigned long compute_target(ud_mnemonic_code_t mnemonic, struct ud_operand *op, 
-        unsigned long pc, unsigned long effective_pc, void *context) 
+unsigned long compute_target(ud_mnemonic_code_t mnemonic,
+                             struct ud_operand *op,
+                             unsigned long pc,
+                             unsigned long effective_pc,
+                             const void *context)
 {
     switch(op->type) {
         case UD_OP_REG:
@@ -269,7 +272,7 @@ unsigned long compute_target(ud_mnemonic_code_t mnemonic, struct ud_operand *op,
     return 0;
 }
 
-uint64_t get_ctf_successor(uint64_t pc, udi_errmsg *errmsg, void *context) {
+uint64_t get_ctf_successor(uint64_t pc, udi_errmsg *errmsg, const void *context) {
 
     ud_t ud_obj;
 
@@ -294,8 +297,11 @@ uint64_t get_ctf_successor(uint64_t pc, udi_errmsg *errmsg, void *context) {
         case UD_Icall:
         case UD_Ijmp:
             // unconditional control transfer
-            successor = compute_target(ud_obj.mnemonic, 
-                    first_op, pc, ud_obj.pc, context);
+            successor = compute_target(ud_obj.mnemonic,
+                                       first_op,
+                                       pc,
+                                       ud_obj.pc,
+                                       context);
             break;
         case UD_Ijo:
         case UD_Ijno:
@@ -320,8 +326,11 @@ uint64_t get_ctf_successor(uint64_t pc, udi_errmsg *errmsg, void *context) {
         case UD_Iloope:
         case UD_Iloop:
             if ( ctf_condition_met(ud_obj.mnemonic, context) ) {
-                successor = compute_target(ud_obj.mnemonic, 
-                        first_op, pc, ud_obj.pc, context);
+                successor = compute_target(ud_obj.mnemonic,
+                                           first_op,
+                                           pc,
+                                           ud_obj.pc,
+                                           context);
             }else{
                 successor = pc + ud_insn_len(&ud_obj);
             }

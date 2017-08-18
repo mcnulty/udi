@@ -83,6 +83,7 @@ typedef struct {
 typedef struct thread_struct thread;
 typedef struct breakpoint_struct breakpoint;
 
+uint64_t get_user_thread_id();
 int get_num_threads();
 int get_multithread_capable();
 int get_multithreaded();
@@ -114,7 +115,13 @@ int handle_thread_request(udirt_fd req_fd,
                           thread *thr,
                           udi_request_type_e *type,
                           udi_errmsg *errmsg);
-int write_error_response(udirt_fd resp_fd, udi_request_type_e req_type, udi_errmsg *errmsg);
+
+typedef int (*response_fd_callback)(void *ctx, udirt_fd *resp_fd, udi_errmsg *errmsg);
+int perform_init_handshake(udirt_fd req_fd,
+                           response_fd_callback callback,
+                           void *ctx,
+                           uint64_t tid,
+                           udi_errmsg *errmsg);
 
 // reading and writing debuggee memory
 void *get_mem_access_addr();
@@ -230,6 +237,7 @@ int decode_breakpoint(thread *thr,
                       int *wait_for_request,
                       udi_errmsg *errmsg);
 
+
 /**
  * @param bp the breakpoint
  *
@@ -248,23 +256,20 @@ int handle_event_breakpoint(breakpoint *bp,
                             const void *context,
                             udi_errmsg *errmsg);
 
-/**
- * Handles an unknown event occurring
- *
- * @param tid the thread that received the event
- *
- * @return the result
- */
-int handle_unknown_event(uint64_t tid);
+int handle_thread_create_event(uint64_t creator_tid,
+                               uint64_t tid,
+                               udi_errmsg *errmsg);
 
-/**
- * Handles an error event
- *
- * @param tid the thread that received the event
- *
- * @return the result
- */
+int handle_thread_death_event(uint64_t tid,
+                              udi_errmsg *errmsg);
+
+int handle_unknown_event(uint64_t tid, udi_errmsg *errmsg);
+
 int handle_error_event(uint64_t tid, udi_errmsg *errmsg);
+
+int handle_exit_event(uint64_t tid, int32_t status, udi_errmsg *errmsg);
+
+int handle_fork_event(uint64_t tid, uint32_t pid, udi_errmsg *errmsg);
 
 // logging
 #define udi_printf(format, ...) \

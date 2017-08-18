@@ -30,7 +30,7 @@ if topenv['CC'] == 'gcc':
     if 'ENABLE_OPT' in os.environ:
         topenv.Append(CFLAGS = "-O2")
         topenv.Append(CXXFLAGS = "-O2")
-    
+
 else:
     print 'Unknown compiler'
     quit()
@@ -74,7 +74,7 @@ if udibuild.IsX86():
 if not conf.CheckLibWithHeader('cbor', 'cbor.h', 'c'):
     print('Did not find libcbor')
     Exit(1)
-    
+
 topenv = conf.Finish()
 
 vars.Save('.udirt.config', topenv)

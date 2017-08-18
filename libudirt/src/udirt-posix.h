@@ -41,7 +41,7 @@ int install_event_breakpoints(udi_errmsg *errmsg);
 int wait_and_execute_command(udi_errmsg *errmsg, thread **thr);
 
 // re-initialize a process after fork
-void reinit_udi_rt();
+void reinit_udirt();
 
 // exit event handling
 
@@ -57,7 +57,7 @@ extern int exiting;
  *
  * @return the result
  */
-int get_exit_argument(const ucontext_t *context, udi_errmsg *errmsg);
+int get_exit_argument(const ucontext_t *context, int *status, udi_errmsg *errmsg);
 
 // library wrapping
 extern void *UDI_RTLD_NEXT;
@@ -112,7 +112,6 @@ struct thread_struct {
 };
 
 int setsigmask(int how, const sigset_t *new_set, sigset_t *old_set);
-uint64_t get_user_thread_id();
 uint32_t get_kernel_thread_id();
 
 // thread synchronization

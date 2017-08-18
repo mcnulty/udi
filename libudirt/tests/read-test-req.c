@@ -13,6 +13,10 @@
 #include "test-lib.h"
 #include "mock-lib.h"
 
+int testing_udirt() {
+    return 1;
+}
+
 struct test_req {
     uint32_t field1;
     const char *field2;
@@ -89,7 +93,7 @@ int main(int argc, char *argv[]) {
     cbor_decref(&root);
 
     int result = read_request_data(1, &config, &req, &errmsg);
-    test_assert(REQ_SUCCESS == result);
+    test_assert(RESULT_SUCCESS == result);
     test_assert(req.field1 == 13);
     test_assert(strcmp(req.field2, "test string") == 0);
 

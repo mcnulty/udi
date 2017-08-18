@@ -8,10 +8,11 @@ Import('topenv')
 
 lib_env = topenv.Clone()
 
-lib_env.Append(CPPPATH = ['#/libudicommon', '#/src'])
+lib_env.Append(CPPPATH = ['#/src'])
 
-sources = ['udirt.c', 'udirt-malloc.c', 'udirt-req.c']
-libs = ['udicommon']
+sources = ['udirt.c', 'udirt-malloc.c', 'udirt-msg.c']
+
+libs = [ 'cbor' ]
 
 if udibuild.IsUnix():
     sources.append('udirt-posix.c')
@@ -27,13 +28,9 @@ if udibuild.IsLinux() and udibuild.IsX86():
 
 if udibuild.IsLinux():
     sources.append('udirt-posix-linux-gnu.c')
-    lib_env.Append(CPPPATH = ['#/ext'])
-
-
-if udibuild.IsLinux():
     libs.append('dl')
 
-lib_env.SharedLibrary('udirt', sources, LIBS=libs,
-        LIBPATH='#/build/libudicommon')
+lib_env.SharedLibrary('udirt', sources, LIBS=libs)
+lib_env.StaticLibrary('udirt', sources)
 
 # vim: ft=python

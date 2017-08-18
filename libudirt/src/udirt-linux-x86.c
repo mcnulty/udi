@@ -21,7 +21,9 @@
 #include "udirt-x86.h"
 #include "udirt-posix-x86.h"
 
-void rewind_pc(ucontext_t *context) {
+void rewind_pc(void *in_context) {
+    ucontext_t *context = (ucontext_t *)in_context;
+
     if (__WORDSIZE == 64) {
         context->uc_mcontext.gregs[X86_64_RIP_OFFSET]--;
     }else{
@@ -77,24 +79,23 @@ unsigned long get_flags(const void *context) {
  *
  * @return the computed address
  */
-udi_address get_trap_address(const ucontext_t *context) {
+uint64_t get_trap_address(const ucontext_t *context) {
     if (__WORDSIZE == 64) {
-        return (udi_address)(unsigned long)context->uc_mcontext.gregs[X86_64_RIP_OFFSET] - 1;
+        return (uint64_t)context->uc_mcontext.gregs[X86_64_RIP_OFFSET] - 1;
     }
 
-    return (udi_address)(unsigned long)context->uc_mcontext.gregs[X86_EIP_OFFSET] - 1;
+    return (uint64_t)context->uc_mcontext.gregs[X86_EIP_OFFSET] - 1;
 }
 
 int get_exit_argument(const ucontext_t *context,
                       int *status,
                       udi_errmsg *errmsg)
 {
-    exit_result ret;
-    ret.failure = 0;
-
+    int result;
     if (__WORDSIZE == 64) {
         // The exit argument is passed in rax
-        ret.status = (int)context->uc_mcontext.gregs[X86_64_RAX_OFFSET];
+        *status = (int)context->uc_mcontext.gregs[X86_64_RAX_OFFSET];
+        result = RESULT_SUCCESS;
     }else{
         // The exit argument is the first parameter on the stack
 
@@ -108,18 +109,21 @@ int get_exit_argument(const ucontext_t *context,
         // skip return address
         sp += word_length;
 
-        int read_result = read_memory(&(ret.status), (const void *)sp, sizeof(int), errmsg);
+        int read_result = read_memory(status, (const void *)sp, sizeof(int), errmsg);
         if ( read_result != 0 ) {
             udi_printf("failed to retrieve exit status off of the stack at 0x%lx\n",
                        sp);
-            snprintf(errmsg->msg, errmsg->size,
+            snprintf(errmsg->msg,
+                     errmsg->size,
                      "failed to retrieve exit status off of the stack at 0x%lx: %s",
-                     sp, get_mem_errstr());
-            ret.failure = read_result;
+                     sp,
+                     get_mem_errstr());
+            result = RESULT_ERROR;
         }
+        result = RESULT_SUCCESS;
     }
 
-    return ret;
+    return result;
 }
 
 /**
@@ -376,8 +380,9 @@ int get_udi_reg_context_offset(udi_register_e reg) {
 }
 
 static
-int get_fp_register(udi_register_e reg, udi_address *value,
-        const ucontext_t *context)
+int get_fp_register(udi_register_e reg,
+                    uint64_t *value,
+                    const ucontext_t *context)
 {
 
     /** TODO need to rethink how floating point values are retrieved
@@ -460,8 +465,11 @@ int is_fp_register(udi_arch_e arch, udi_register_e reg) {
  *
  * @return 0 on success; non-zero on failure
  */
-int get_register(udi_arch_e arch, udi_register_e reg, udi_errmsg *errmsg, udi_address *value, 
-        const void *context) 
+int get_register(udi_arch_e arch,
+                 udi_register_e reg,
+                 udi_errmsg *errmsg,
+                 uint64_t *value,
+                 const void *context)
 {
     const ucontext_t *u_context = (const ucontext_t *)context;
 
@@ -471,7 +479,7 @@ int get_register(udi_arch_e arch, udi_register_e reg, udi_errmsg *errmsg, udi_ad
 
     int offset = get_udi_reg_context_offset(reg);
     if (offset >= 0 ) {
-        *value = (udi_address)(unsigned long)u_context->uc_mcontext.gregs[offset];
+        *value = (uint64_t)u_context->uc_mcontext.gregs[offset];
     }else if (offset == -1) {
         if ( get_fp_register(reg, value, u_context) != 0 ) {
             offset = -2;
@@ -497,8 +505,11 @@ int get_register(udi_arch_e arch, udi_register_e reg, udi_errmsg *errmsg, udi_ad
  *
  * @return 0 on success; non-zero on failure
  */
-int set_register(udi_arch_e arch, udi_register_e reg, udi_errmsg *errmsg, udi_address value,
-        void *context)
+int set_register(udi_arch_e arch,
+                 udi_register_e reg,
+                 udi_errmsg *errmsg,
+                 uint64_t value,
+                 void *context)
 {
     ucontext_t *u_context = (ucontext_t *)context;
 

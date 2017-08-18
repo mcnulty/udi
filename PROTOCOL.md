@@ -306,11 +306,11 @@ No data.
 
 **process exit**
 
-- `code`: The exit code from the process exit as an unsigned, 64-bit integer.
+- `code`: The exit code from the process exit as a signed, 32-bit integer.
 
 **process fork**
 
-- `pid`: The process id for the new process as an unsigned, 64-bit integer.
+- `pid`: The process id for the new process as an unsigned, 32-bit integer.
 
 **process exec**
 

@@ -772,36 +772,6 @@ int state_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg) {
     return write_response(resp_fd, UDI_RESP_VALID, UDI_REQ_STATE, map, errmsg);
 }
 
-// init request handling
-
-static
-int init_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg) {
-
-    cbor_item_t *map = cbor_new_definite_map(4);
-
-    struct cbor_pair v_pair;
-    v_pair.key = cbor_move(cbor_build_string("v"));
-    v_pair.value = cbor_move(cbor_build_uint32(get_protocol_version()));
-    cbor_map_add(map, v_pair);
-
-    struct cbor_pair arch_pair;
-    arch_pair.key = cbor_move(cbor_build_string("arch"));
-    arch_pair.value = cbor_move(cbor_build_uint16(get_architecture()));
-    cbor_map_add(map, arch_pair);
-
-    struct cbor_pair mt_pair;
-    mt_pair.key = cbor_move(cbor_build_string("mt"));
-    mt_pair.value = cbor_move(cbor_build_bool(get_multithread_capable()));
-    cbor_map_add(map, mt_pair);
-
-    struct cbor_pair tid_pair;
-    tid_pair.key = cbor_move(cbor_build_string("tid"));
-    tid_pair.value = cbor_move(cbor_build_uint64(get_thread_id(get_current_thread())));
-    cbor_map_add(map, tid_pair);
-
-    return write_response(req_fd, UDI_RESP_VALID, UDI_REQ_INIT, map, errmsg);
-}
-
 // breakpoint request handling
 
 static
@@ -829,6 +799,7 @@ int read_breakpoint_addr(udirt_fd req_fd, uint64_t *addr, udi_errmsg *errmsg) {
 
     static struct msg_config config;
     static struct msg_item items[1];
+    breakpoint_init_config(&config, items);
 
     brkpt_req req;
     memset(&req, 0, sizeof(req));
@@ -960,7 +931,7 @@ request_handler request_handlers[] = {
     invalid_handler,
     invalid_handler,
     state_handler,
-    init_handler,
+    invalid_handler,
     breakpoint_create_handler,
     breakpoint_install_handler,
     breakpoint_remove_handler,
@@ -1005,6 +976,7 @@ int read_request_type(udirt_fd req_fd, udi_request_type_e *type, udi_errmsg *err
     return RESULT_SUCCESS;
 }
 
+static
 int write_error_response(udirt_fd resp_fd, udi_request_type_e req_type, udi_errmsg *errmsg) {
     cbor_item_t *map = cbor_new_definite_map(1);
 
@@ -1035,6 +1007,70 @@ int handle_process_request(udirt_fd req_fd,
     if (result != RESULT_SUCCESS) {
         return write_error_response(resp_fd, *type, errmsg);
     }
+
+    return result;
+}
+
+// init request handling
+
+static
+int init_handler(uint64_t tid, udirt_fd resp_fd, udi_errmsg *errmsg) {
+
+    cbor_item_t *map = cbor_new_definite_map(4);
+
+    struct cbor_pair v_pair;
+    v_pair.key = cbor_move(cbor_build_string("v"));
+    v_pair.value = cbor_move(cbor_build_uint32(get_protocol_version()));
+    cbor_map_add(map, v_pair);
+
+    struct cbor_pair arch_pair;
+    arch_pair.key = cbor_move(cbor_build_string("arch"));
+    arch_pair.value = cbor_move(cbor_build_uint16(get_architecture()));
+    cbor_map_add(map, arch_pair);
+
+    struct cbor_pair mt_pair;
+    mt_pair.key = cbor_move(cbor_build_string("mt"));
+    mt_pair.value = cbor_move(cbor_build_bool(get_multithread_capable()));
+    cbor_map_add(map, mt_pair);
+
+    struct cbor_pair tid_pair;
+    tid_pair.key = cbor_move(cbor_build_string("tid"));
+    tid_pair.value = cbor_move(cbor_build_uint64(tid));
+    cbor_map_add(map, tid_pair);
+
+    return write_response(resp_fd, UDI_RESP_VALID, UDI_REQ_INIT, map, errmsg);
+}
+
+int perform_init_handshake(udirt_fd req_fd,
+                           response_fd_callback callback,
+                           void *ctx,
+                           uint64_t tid,
+                           udi_errmsg *errmsg)
+{
+    int result;
+    do {
+        udi_request_type_e type = UDI_REQ_INVALID;
+        result = read_request_type(req_fd, &type, errmsg);
+        if (result != RESULT_SUCCESS) {
+            break;
+        }
+
+        udirt_fd resp_fd;
+        result = callback(ctx, &resp_fd, errmsg);
+        if (result != RESULT_SUCCESS) {
+            break;
+        }
+
+        if (type != UDI_REQ_INIT) {
+            snprintf(errmsg->msg,
+                     errmsg->size,
+                     "received invalid request type(%s) as init request",
+                     request_type_str(type));
+            result = write_error_response(resp_fd, type, errmsg);
+        } else {
+            result = init_handler(tid, resp_fd, errmsg);
+        }
+    }while(0);
 
     return result;
 }
@@ -1207,6 +1243,7 @@ int next_instr_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errms
     struct cbor_pair addr_pair;
     addr_pair.key = cbor_move(cbor_build_string("addr"));
     addr_pair.value = cbor_move(cbor_build_uint64(address));
+    cbor_map_add(map, addr_pair);
 
     return write_response(resp_fd, UDI_RESP_VALID, UDI_REQ_NEXT_INSTRUCTION, map, errmsg);
 }
@@ -1462,7 +1499,7 @@ int decode_breakpoint(thread *thr,
                    get_thread_id(bp->thread),
                    get_thread_id(thr));
         *wait_for_request = 0;
-        return result;
+        return RESULT_ERROR;
     }
 
     udi_printf("user breakpoint at 0x%"PRIx64"\n", bp->address);
@@ -1484,4 +1521,72 @@ int decode_breakpoint(thread *thr,
     }
 
     return result;
+}
+
+int handle_thread_death_event(uint64_t tid,
+                              udi_errmsg *errmsg)
+{
+    return write_event_no_data(events_handle, UDI_EVENT_THREAD_DEATH, tid, errmsg);
+}
+
+int handle_exit_event(uint64_t tid, int32_t status, udi_errmsg *errmsg) {
+
+    cbor_item_t *map = cbor_new_definite_map(1);
+
+    cbor_item_t *code = cbor_new_int32();
+    if (status >= 0) {
+        cbor_mark_uint(code);
+    }else{
+        cbor_mark_negint(code);
+    }
+    cbor_set_uint32(code, status);
+
+    struct cbor_pair code_pair;
+    code_pair.key = cbor_move(cbor_build_string("code"));
+    code_pair.value = cbor_move(code);
+    cbor_map_add(map, code_pair);
+
+    return write_event(events_handle, UDI_EVENT_PROCESS_EXIT, tid, map, errmsg);
+}
+
+int handle_fork_event(uint64_t tid, uint32_t pid, udi_errmsg *errmsg) {
+
+    cbor_item_t *map = cbor_new_definite_map(1);
+
+    struct cbor_pair pid_pair;
+    pid_pair.key = cbor_move(cbor_build_string("pid"));
+    pid_pair.value = cbor_move(cbor_build_uint32(pid));
+    cbor_map_add(map, pid_pair);
+
+    return write_event(events_handle, UDI_EVENT_PROCESS_FORK, tid, map, errmsg);
+}
+
+int handle_thread_create_event(uint64_t creator_tid,
+                               uint64_t tid,
+                               udi_errmsg *errmsg)
+{
+    cbor_item_t *map = cbor_new_definite_map(1);
+
+    struct cbor_pair tid_pair;
+    tid_pair.key = cbor_move(cbor_build_string("tid"));
+    tid_pair.value = cbor_move(cbor_build_uint64(tid));
+    cbor_map_add(map, tid_pair);
+
+    return write_event(events_handle, UDI_EVENT_THREAD_CREATE, creator_tid, map, errmsg);
+}
+
+int handle_unknown_event(uint64_t tid, udi_errmsg *errmsg) {
+    return write_event_no_data(events_handle, UDI_EVENT_UNKNOWN, tid, errmsg);
+}
+
+int handle_error_event(uint64_t tid, udi_errmsg *errmsg) {
+
+    cbor_item_t *map = cbor_new_definite_map(1);
+
+    struct cbor_pair error_pair;
+    error_pair.key = cbor_move(cbor_build_string("msg"));
+    error_pair.value = cbor_move(cbor_build_string(errmsg->msg));
+    cbor_map_add(map, error_pair);
+
+    return write_event(events_handle, UDI_EVENT_ERROR, tid, map, errmsg);
 }

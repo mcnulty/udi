@@ -119,41 +119,6 @@ void udi_abort(const char *file, unsigned int line) {
 }
 
 /**
- * Performs handling necessary to handle a pipe write failure gracefully.
- */
-static void handle_pipe_write_failure() {
-    pipe_write_failure = 1;
-
-    sigset_t set;
-
-    if ( sigpending(&set) != 0 ) {
-        udi_printf("failed to get pending signals: %s\n", strerror(errno));
-        return;
-    }
-
-    if ( sigismember(&set, SIGPIPE) != 1 ) {
-        udi_printf("%s\n", "SIGPIPE is not pending, cannot handle write failure");
-        return;
-    }
-
-    sigset_t cur_set;
-    if ( setsigmask(SIG_BLOCK, NULL, &cur_set) != 0 ) {
-        udi_printf("failed to get current signals: %s\n", strerror(errno));
-        return;
-    }
-    sigdelset(&set, SIGPIPE);
-
-    sigsuspend(&set);
-    if ( errno != EINTR ) {
-        udi_printf("failed to wait for signal to be delivered: %s\n",
-                strerror(errno));
-        return;
-    }
-
-    pipe_write_failure = 0;
-}
-
-/**
  * Translates the failed memory access code into an error
  * message
  *
@@ -402,6 +367,8 @@ static int decode_segv(const siginfo_t *siginfo,
                          "failed to modify permissions for memory access: %s",
                          strerror(errno));
                 udi_printf("%s\n", errmsg->msg);
+            } else {
+                result = RESULT_SUCCESS;
             }
         }else{
             udi_printf("address 0x%lx not mapped for process %d\n",
@@ -446,9 +413,10 @@ int decode_trap(thread *thr,
     // Check and see if it corresponds to a breakpoint
     breakpoint *bp = find_breakpoint(trap_address);
 
+    int result;
     if ( bp != NULL ) {
         udi_printf("breakpoint hit at 0x%"PRIx64"\n", trap_address);
-        result = decode_breakpoint(thr, bp, context, errmsg);
+        result = decode_breakpoint(thr, bp, context, wait_for_request, errmsg);
     }else{
         // TODO create signal event
         snprintf(errmsg->msg, errmsg->size, "Failed to decode trap event at 0x%"PRIx64, trap_address);
@@ -561,7 +529,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
                 result = decode_trap(thr, siginfo, context, &wait_for_request, &errmsg);
                 break;
             default:
-                result = handle_unknown_event(get_user_thread_id());
+                result = handle_unknown_event(get_user_thread_id(), &errmsg);
                 break;
         }
 
@@ -668,7 +636,7 @@ static void global_initialization() {
 static
 int remove_udi_filesystem() {
     // TODO
-    
+
     return 0;
 }
 
@@ -1126,6 +1094,28 @@ int thread_create_callback(thread *thr, udi_errmsg *errmsg) {
     return result;
 }
 
+struct thr_resp_ctx {
+    thread *thr;
+    const char *response_file;
+};
+
+static
+int thread_create_response_fd_callback(void *ctx, udirt_fd *resp_fd, udi_errmsg *errmsg) {
+    struct thr_resp_ctx *resp_ctx = (struct thr_resp_ctx *)ctx;
+
+    resp_ctx->thr->response_handle = open(resp_ctx->response_file, O_WRONLY);
+    if (resp_ctx->thr->response_handle == -1) {
+        snprintf(errmsg->msg,
+                 errmsg->size,
+                 "failed to open %s: %s",
+                 resp_ctx->response_file,
+                 strerror(errno));
+        return RESULT_ERROR;
+    }
+
+    return RESULT_SUCCESS;
+}
+
 /**
  * Performs the handshake with the debugger after the creation of the thread files
  *
@@ -1142,69 +1132,47 @@ int thread_create_handshake(thread *thr, udi_errmsg *errmsg) {
     do {
         thread_dir = get_thread_dir(thr);
         if (thread_dir == NULL) {
-            result = -1;
+            result = RESULT_ERROR;
             break;
         }
 
         response_file = get_thread_file(thr, thread_dir, RESPONSE_FILE_NAME);
         if (response_file == NULL) {
-            result = -1;
+            result = RESULT_ERROR;
             break;
         }
 
         request_file = get_thread_file(thr, thread_dir, REQUEST_FILE_NAME);
         if (request_file == NULL) {
-            result = -1;
+            result = RESULT_ERROR;
             break;
         }
 
-        if ( (thr->request_handle = open(request_file, O_RDONLY)) == -1 ) {
-            snprintf(errmsg->msg, errmsg->size, "failed to open %s: %s", request_file, strerror(errno));
-            result = -1;
+        thr->request_handle = open(request_file, O_RDONLY);
+        if (thr->request_handle == -1) {
+            snprintf(errmsg->msg,
+                     errmsg->size,
+                     "failed to open %s: %s",
+                     request_file,
+                     strerror(errno));
+            result = RESULT_ERROR;
             break;
         }
 
-        udi_request *init_request = read_request_from_fd(thr->request_handle);
-        if (init_request == NULL) {
-            snprintf(errmsg->msg, errmsg->size, "failed to read init request");
-            result = -1;
+        result = perform_init_handshake(thr->request_handle,
+                                        thread_create_response_fd_callback,
+                                        thr,
+                                        thr->id,
+                                        errmsg);
+        if (result != RESULT_SUCCESS) {
+            udi_printf("failed to complete init handshake for thread 0x%"PRIx64"\n",
+                       thr->id);
             break;
-        }
-
-        if (init_request->request_type != UDI_REQ_INIT) {
-            udi_printf("%s", "invalid request type, proceeding anyways");
-        }
-
-        free_request(init_request);
-
-        if ( (thr->response_handle = open(response_file, O_WRONLY)) == -1 ) {
-            snprintf(errmsg->msg, errmsg->size, "failed to open %s: %s", response_file, strerror(errno));
-            result = -1;
-            break;
-        }
-
-        udi_response init_response = create_response_init(get_protocol_version(),
-                get_architecture(),
-                get_multithread_capable(),
-                get_user_thread_id());
-
-        if ( init_response.packed_data == NULL ) {
-            snprintf(errmsg->msg, errmsg->size, "failed to create init response: %s\n",
-                    strerror(errno));
-            result = -1;
-            break;
-        }
-
-        result = write_response_to_fd(thr->response_handle, &init_response);
-        udi_free(init_response.packed_data);
-
-        if ( result != 0 ) {
-            snprintf(errmsg->msg, errmsg->size, "failed to write init response");
         }
     }while(0);
 
-    if (result != 0) {
-        udi_printf("%s\n", errmsg->msg);
+    if (result != RESULT_SUCCESS) {
+        udi_printf("failed to complete handshake for thread: %s\n", errmsg->msg);
     }
 
     udi_free(thread_dir);
@@ -1319,94 +1287,78 @@ int thread_death_handshake(thread *thr, udi_errmsg *errmsg) {
     return 0;
 }
 
+static
+int process_response_fd_callback(void *ctx, udirt_fd *resp_fd, udi_errmsg *errmsg) {
+    thread **output = (thread **)ctx;
+
+    response_handle = open(responsefile_name, O_WRONLY);
+    if (response_handle == -1) {
+        snprintf(errmsg->msg,
+                 errmsg->size,
+                 "error opening response file fifo: %s",
+                 strerror(errno));
+        return RESULT_ERROR;
+    }
+
+    thread *thr = create_initial_thread();
+    if (thr == NULL) {
+        snprintf(errmsg->msg,
+                 errmsg->size,
+                 "failed to create initial thread");
+        return RESULT_ERROR;
+    }
+
+    if ( thread_create_callback(thr, errmsg) != 0 ) {
+        udi_printf("failed to create thread-specific files: %s\n", errmsg->msg);
+        return RESULT_ERROR;
+    }
+
+    events_handle = open(eventsfile_name, O_WRONLY);
+    if (events_handle == -1) {
+        snprintf(errmsg->msg,
+                 errmsg->size,
+                 "error openining response file fifo: %s",
+                 strerror(errno));
+        return RESULT_ERROR;
+    }
+
+    *output = thr;
+    *resp_fd = response_handle;
+    return RESULT_SUCCESS;
+}
+
 /**
  * Performs the initiation handshake with the debugger.
  *
- * @param output_enabled set if an error can be reported to the debugger
  * @param errmsg the error message populated on error
  *
- * @return 0 on success; non-zero on failure
+ * @return RESULT_SUCCESS on success
  */
 static
-int handshake_with_debugger(int *output_enabled, udi_errmsg *errmsg) {
-    int errnum = 0;
-
+int handshake_with_debugger(udi_errmsg *errmsg) {
+    int result;
     do {
-        if ((request_handle = open(requestfile_name, O_RDONLY))
-                == -1 ) {
-            udi_printf("error opening request file fifo: %s\n",
-                       strerror(errno));
-            errnum = errno;
+        if ((request_handle = open(requestfile_name, O_RDONLY)) == -1 ) {
+            snprintf(errmsg->msg,
+                     errmsg->size,
+                     "error opening request file fifo: %s",
+                     strerror(errno));
+            result = RESULT_ERROR;
             break;
         }
 
-        udi_request *init_request = read_request_from_fd(request_handle);
-        if ( init_request == NULL ) {
-            snprintf(errmsg->msg, errmsg->size, "%s", 
-                    "failed reading init request");
-            udi_printf("%s\n", "failed reading init request");
-            errnum = -1;
-            break;
-        }
-        
-        if ( init_request->request_type != UDI_REQ_INIT ) {
-            udi_printf("%s\n",
-                    "invalid init request received, proceeding anyways...");
-        }
-
-        free_request(init_request);
-
-        if ((response_handle = open(responsefile_name, O_WRONLY))
-                == -1 ) {
-            udi_printf("error open response file fifo: %s\n",
-                       strerror(errno));
-            errnum = errno;
-            break;
-        }
-        *output_enabled = 1;
-
-        thread *thr = create_initial_thread();
-        if (thr == NULL) {
-            udi_printf("%s\n", "failed to create initial thread");
-            errnum = -1;
+        thread *thr = NULL;
+        result = perform_init_handshake(request_handle,
+                                        process_response_fd_callback,
+                                        &thr,
+                                        get_user_thread_id(),
+                                        errmsg);
+        if (result != RESULT_SUCCESS) {
             break;
         }
 
-        if ( (errnum = thread_create_callback(thr, errmsg)) != 0 ) {
-            udi_printf("failed to create thread-specific files: %s\n", errmsg->msg);
-            break;
-        }
-
-        if ((events_handle = open(eventsfile_name, O_WRONLY))
-                == -1 ) {
-            udi_printf("error open response file fifo: %s\n",
-                       strerror(errno));
-            errnum = errno;
-            break;
-        }
-
-        // create the init response
-        udi_response init_response = create_response_init(get_protocol_version(),
-                get_architecture(),
-                get_multithread_capable(),
-                get_user_thread_id());
-
-        if ( init_response.packed_data == NULL ) {
-            udi_printf("failed to create init response: %s\n",
-                    strerror(errno));
-            errnum = errno;
-            break;
-        }
-
-        errnum = write_response(&init_response);
-        if ( errnum ) {
-            udi_printf("%s\n", "failed to write init response");
-            *output_enabled = 0;
-        }
-
-        udi_free(init_response.packed_data);
-
-        if ( (errnum = thread_create_handshake(thr, errmsg)) != 0 ) {
+        result = thread_create_handshake(thr, errmsg);
+        if (result != RESULT_SUCCESS) {
             udi_printf("failed to complete thread create handshake: %s\n", errmsg->msg);
             break;
         }
@@ -1416,30 +1368,23 @@ int handshake_with_debugger(int *output_enabled, udi_errmsg *errmsg) {
 
     }while(0);
 
-    return errnum;
+    return result;
 }
 
-
-/**
- * Re-initializes the process, currently used to initialize child produced by a fork
- */
-void reinit_udi_rt() {
+void reinit_udirt() {
     // TODO
 }
 
 /** The entry point for initialization declaration */
-void init_udi_rt() UDI_CONSTRUCTOR;
+void init_udirt() UDI_CONSTRUCTOR;
 
 /**
  * The entry point for initialization
  */
-void init_udi_rt() {
+void init_udirt() {
     udi_errmsg errmsg;
     errmsg.size = ERRMSG_SIZE;
     errmsg.msg[ERRMSG_SIZE-1] = '\0';
-
-    int errnum = 0;
-    int output_enabled = 0;
 
     enable_debug_logging();
 
@@ -1449,74 +1394,77 @@ void init_udi_rt() {
 
     thread *request_thr = NULL;
     sigset_t original_set;
+    int result;
     do {
         sigset_t block_set;
         sigfillset(&block_set);
 
         // Block any signals during initialization
-        if ( setsigmask(SIG_SETMASK, &block_set, &original_set) == -1 )
-        {
-            errnum = errno;
-            udi_printf("failed to block all signals: %s\n", strerror(errnum));
+        if ( setsigmask(SIG_SETMASK, &block_set, &original_set) == -1 ) {
+            snprintf(errmsg.msg,
+                     errmsg.size,
+                     "failed to block all signals: %s",
+                     strerror(errno));
+            result = RESULT_ERROR;
             break;
         }
 
-        if ( (errnum = locate_wrapper_functions(&errmsg)) != 0 ) {
-            udi_printf("%s\n", "failed to locate wrapper functions");
+        if ( locate_wrapper_functions(&errmsg) != 0 ) {
+            result = RESULT_ERROR;
             break;
         }
 
-        if ( (errnum = initialize_pthreads_support(&errmsg))
-                != 0 )
-        {
-            udi_printf("%s\n", "failed to initialize pthreads support");
+        if ( initialize_pthreads_support(&errmsg) != 0 ) {
+            result = RESULT_ERROR;
             break;
         }
 
-        if ( (errnum = initialize_thread_sync()) != 0 ) {
-            udi_printf("%s\n", "failed to initialize thread sync");
+        if ( initialize_thread_sync() != 0 ) {
+            snprintf(errmsg.msg,
+                     errmsg.size,
+                     "failed to initialize thread sync");
+            result = RESULT_ERROR;
             break;
         }
 
-        if ( (errnum = setup_signal_handlers()) != 0 ) {
-            udi_printf("%s\n", "failed to setup signal handlers");
+        if ( setup_signal_handlers() != 0 ) {
+            snprintf(errmsg.msg,
+                     errmsg.size,
+                     "failed to setup signal handlers");
+            result = RESULT_ERROR;
             break;
         }
 
-        if ( (errnum = install_event_breakpoints(&errmsg)) != 0 ) {
-            udi_printf("%s\n", "failed to install event breakpoints");
+        if ( install_event_breakpoints(&errmsg) != 0 ) {
+            result = RESULT_ERROR;
             break;
         }
 
-        if ( (errnum = create_udi_filesystem()) != 0 ) {
-            udi_printf("%s\n", "failed to create udi filesystem");
+        if ( create_udi_filesystem() != 0 ) {
+            snprintf(errmsg.msg,
+                     errmsg.size,
+                     "failed to create udi filesystem");
+            result = RESULT_ERROR;
             break;
         }
 
-        if ( (errnum = handshake_with_debugger(&output_enabled, &errmsg) != 0) ) {
+        result = handshake_with_debugger(&errmsg);
+        if (result != RESULT_SUCCESS) {
             udi_printf("%s\n", "failed to complete handshake with debugger");
             break;
         }
 
-        if ( wait_and_execute_command(&errmsg, &request_thr) != RESULT_SUCCESS ) {
+        result = wait_and_execute_command(&errmsg, &request_thr);
+        if ( result != RESULT_SUCCESS ) {
             udi_printf("%s\n", "failed to handle initial command");
             break;
         }
     } while(0);
 
-    if (errnum > 0) {
-        strerror_r(errnum, errmsg.msg, errmsg.size-1);
-    }
-
-    if (errnum != 0) {
+    if (result != RESULT_SUCCESS ) {
         udi_enabled = 0;
 
-        if(output_enabled) {
-            // explicitly ignore errors
-            write_error_response(response_handle, UDI_REQ_INIT, errmsg);
-        }
-
-        udi_printf("%s\n", "Initialization failed");
+        udi_printf("Initialization failed: %s\n", errmsg.msg);
         udi_abort(__FILE__, __LINE__);
     }else{
         udi_printf("%s\n", "Initialization completed");
@@ -1526,12 +1474,13 @@ void init_udi_rt() {
     setsigmask(SIG_SETMASK, &original_set, NULL);
 }
 
-int read_all(int fd, void *dest, size_t length)
+int read_from(udirt_fd fd, uint8_t *dst, size_t length)
 {
     size_t total = 0;
     while (total < length) {
-        ssize_t num_read = read(fd, ((unsigned char*)dest) + total, 
-                length - total);
+        ssize_t num_read = read(fd,
+                                dst + total,
+                                length - total);
 
         if ( num_read == 0 ) {
             // Treat end-of-file as a separate error
@@ -1548,18 +1497,62 @@ int read_all(int fd, void *dest, size_t length)
     return 0;
 }
 
-int write_all(int fd, void *src, size_t length) {
+/**
+ * Performs handling necessary to handle a pipe write failure gracefully.
+ */
+static
+void handle_pipe_write_failure() {
+    pipe_write_failure = 1;
+
+    sigset_t set;
+
+    if ( sigpending(&set) != 0 ) {
+        udi_printf("failed to get pending signals: %s\n", strerror(errno));
+        return;
+    }
+
+    if ( sigismember(&set, SIGPIPE) != 1 ) {
+        udi_printf("%s\n", "SIGPIPE is not pending, cannot handle write failure");
+        return;
+    }
+
+    sigset_t cur_set;
+    if ( setsigmask(SIG_BLOCK, NULL, &cur_set) != 0 ) {
+        udi_printf("failed to get current signals: %s\n", strerror(errno));
+        return;
+    }
+    sigdelset(&set, SIGPIPE);
+
+    sigsuspend(&set);
+    if ( errno != EINTR ) {
+        udi_printf("failed to wait for signal to be delivered: %s\n",
+                strerror(errno));
+        return;
+    }
+
+    pipe_write_failure = 0;
+}
+
+int write_to(udirt_fd fd, const uint8_t *src, size_t length) {
+
+    int errnum = 0;
     size_t total = 0;
     while (total < length) {
-        ssize_t num_written = write(fd, ((unsigned char *)src) + total, 
-                length - total);
+        ssize_t num_written = write(fd,
+                                    ((unsigned char *)src) + total,
+                                    length - total);
         if ( num_written < 0 ) {
             if ( errno == EINTR ) continue;
-            return errno;
+            errnum = errno;
+            break;
         }
 
         total += num_written;
     }
 
-    return 0;
+    if (errnum == EPIPE) {
+        handle_pipe_write_failure();
+    }
+
+    return errnum;
 }

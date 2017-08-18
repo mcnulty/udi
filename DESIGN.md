@@ -132,8 +132,8 @@ initialization handshake should be completed for the initial thread.
 
 ## 3.2.1 Thread initialization ##
 
-When a thread is created, the debuggee library will create a request and 
-response file in the udi pseudo-filesystem in a directory named the
+When a thread is created, the debuggee library will create a request and
+response file in the udi pseudo-filesystem in a directory named with the
 thread id for the thread. After writing an event to the events file for
 the process, the debuggee will wait for an init request on the thread's
 request file. After receiving the thread create event, the debugger should
