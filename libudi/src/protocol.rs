@@ -33,8 +33,8 @@ macro_rules! enum_number {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
                 where S: ::serde::Serializer
             {
-                // Serialize the enum as a u64.
-                serializer.serialize_u64(*self as u64)
+                // Serialize the enum as a u16.
+                serializer.serialize_u16(*self as u16)
             }
         }
 
@@ -51,7 +51,7 @@ macro_rules! enum_number {
                         formatter.write_str("positive integer")
                     }
 
-                    fn visit_u64<E>(self, value: u64) -> Result<$name, E>
+                    fn visit_u16<E>(self, value: u16) -> Result<$name, E>
                         where E: ::serde::de::Error
                     {
                         // Rust does not come with a simple way of converting a
@@ -65,8 +65,8 @@ macro_rules! enum_number {
                     }
                 }
 
-                // Deserialize the enum from a u64.
-                deserializer.deserialize_u64(Visitor)
+                // Deserialize the enum from a u16.
+                deserializer.deserialize_u16(Visitor)
             }
         }
     }
@@ -79,7 +79,7 @@ enum_number!(Architecture {
 
 pub mod request {
 
-	enum_number!(Type {
+    enum_number!(Type {
         Continue = 0,
         ReadMemory = 1,
         WriteMemory = 2,
@@ -95,11 +95,15 @@ pub mod request {
         ThreadResume = 12,
         NextInstruction = 13,
         SingleStep = 14,
-	});
+    });
+
+    pub trait RequestType {
+        fn typ(&self) -> Type;
+    }
 
     #[derive(Deserialize, Serialize, Debug)]
     pub struct Init {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type,
     }
 
@@ -109,9 +113,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for Init {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct Continue {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type,
         pub sig: u32
     }
@@ -122,9 +132,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for Continue {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct ReadMemory {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type,
         pub addr: u64,
         pub len: u32
@@ -136,9 +152,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for ReadMemory {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct WriteMemory<'a> {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type,
         pub addr: u64,
         pub data: &'a[u8]
@@ -150,9 +172,15 @@ pub mod request {
         }
     }
 
+    impl<'a> RequestType for WriteMemory<'a> {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct ReadRegister {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type,
         pub reg: u32
     }
@@ -163,9 +191,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for ReadRegister {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct WriteRegister {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type,
         pub reg: u32,
         pub value: u64
@@ -177,9 +211,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for WriteRegister {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct CreateBreakpoint {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type,
         pub addr: u64
     }
@@ -190,9 +230,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for CreateBreakpoint {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct InstallBreakpoint {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type,
         pub addr: u64
     }
@@ -203,9 +249,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for InstallBreakpoint {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct RemoveBreakpoint {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type,
         pub addr: u64
     }
@@ -216,9 +268,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for RemoveBreakpoint {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct DeleteBreakpoint {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type,
         pub addr: u64
     }
@@ -229,9 +287,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for DeleteBreakpoint {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct ThreadSuspend {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type
     }
 
@@ -241,9 +305,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for ThreadSuspend {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct ThreadResume {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type
     }
 
@@ -253,9 +323,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for ThreadResume {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct State {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type
     }
 
@@ -265,9 +341,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for State {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct NextInstruction {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type
     }
 
@@ -277,9 +359,15 @@ pub mod request {
         }
     }
 
+    impl RequestType for NextInstruction {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct SingleStep {
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         typ: Type,
         value: u8
     }
@@ -290,6 +378,22 @@ pub mod request {
 
             SingleStep{ typ: Type::SingleStep, value }
         }
+    }
+
+    impl RequestType for SingleStep {
+        fn typ(&self) -> Type {
+            self.typ
+        }
+    }
+
+    pub fn serialize<T: super::Serialize + RequestType>(req: &T)
+            -> Result<Vec<u8>, super::UdiError> {
+        let mut output: Vec<u8> = Vec::new();
+
+        super::serde_cbor::ser::to_writer(&mut output, &req.typ())?;
+        super::serde_cbor::ser::to_writer(&mut output, req)?;
+
+        Ok(output)
     }
 }
 
@@ -371,10 +475,6 @@ pub mod response {
         pub code: u32,
         pub msg: String
     }
-}
-
-pub fn serialize_message<T: Serialize>(msg: &T) -> Result<Vec<u8>, UdiError> {
-    Ok(serde_cbor::to_vec(msg)?)
 }
 
 pub fn read_response<T: DeserializeOwned, R: Read>(reader: &mut R) -> Result<T, UdiError> {

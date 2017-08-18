@@ -103,8 +103,8 @@ fn initialize_process(child: &mut ::std::process::Child, root_dir: String)
     // order matters here because POSIX FIFOs block in open calls
 
     let mut request_file = fs::File::open(request_path)?;
-        
-    request_file.write_all(&protocol::serialize_message(&request::Init::new())?)?;
+
+    request_file.write_all(&protocol::request::serialize(&request::Init::new())?)?;
 
     let mut response_file = fs::File::open(response_path)?;
     let events_file = fs::File::open(event_path)?;
@@ -113,7 +113,7 @@ fn initialize_process(child: &mut ::std::process::Child, root_dir: String)
 
     // Check compatibility with protocol version
     let version = determine_protocol(&init)?;
-    
+
     let mut process = Process {
         pid: pid,
         file_context: Some(ProcessFileContext{ request_file, response_file, events_file }),
@@ -155,7 +155,7 @@ pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<(), UdiError
 
     let mut request_file = fs::File::open(request_path)?;
 
-    request_file.write_all(&protocol::serialize_message(&request::Init::new())?)?;
+    request_file.write_all(&protocol::request::serialize(&request::Init::new())?)?;
 
     let mut response_file = fs::File::open(response_path)?;
 

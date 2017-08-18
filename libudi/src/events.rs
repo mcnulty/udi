@@ -182,7 +182,7 @@ mod sys {
 
         fn reregister(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt)
             -> io::Result<()> {
-                
+
             EventedFd(&self.fd).reregister(poll, token, interest, opts)
         }
 

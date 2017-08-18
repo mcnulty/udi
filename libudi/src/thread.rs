@@ -18,7 +18,6 @@ use super::protocol::Register;
 use super::protocol::request;
 use super::protocol::response;
 use super::protocol::Architecture;
-use super::protocol::serialize_message;
 use super::protocol::read_response;
 use super::UserData;
 
@@ -99,7 +98,8 @@ impl Thread {
         Ok(())
     }
 
-    fn send_request<T: DeserializeOwned, S: Serialize>(&mut self, msg: &S) -> Result<T, UdiError> {
+    fn send_request<T: DeserializeOwned, S: request::RequestType + Serialize>(&mut self, msg: &S)
+            -> Result<T, UdiError> {
         let ctx = match self.file_context.as_mut() {
             Some(ctx) => ctx,
             None => {
@@ -109,7 +109,7 @@ impl Thread {
             }
         };
 
-        ctx.request_file.write_all(&serialize_message(msg)?)?;
+        ctx.request_file.write_all(&request::serialize(msg)?)?;
 
         read_response::<T, File>(&mut ctx.response_file)
     }

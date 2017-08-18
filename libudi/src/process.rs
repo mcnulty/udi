@@ -22,7 +22,7 @@ use super::Process;
 use super::ProcessFileContext;
 use super::Thread;
 use super::ThreadState;
-use super::protocol::{request,response,read_response,serialize_message};
+use super::protocol::{request,response,read_response};
 use super::UserData;
 
 impl Process {
@@ -72,7 +72,7 @@ impl Process {
             let ctx = self.get_file_context()?;
 
             // No response is expected when continuing a terminating process
-            ctx.request_file.write_all(&serialize_message(&msg)?)?;
+            ctx.request_file.write_all(&request::serialize(&msg)?)?;
         } else {
             self.send_request::<response::Continue, _>(&msg)?;
         }
@@ -151,10 +151,11 @@ impl Process {
         Ok(resp.data)
     }
 
-    fn send_request<T: DeserializeOwned, S: Serialize>(&mut self, msg: &S) -> Result<T, UdiError> {
+    fn send_request<T: DeserializeOwned, S: request::RequestType + Serialize>(&mut self, msg: &S)
+            -> Result<T, UdiError> {
         let ctx = self.get_file_context()?;
 
-        ctx.request_file.write_all(&serialize_message(msg)?)?;
+        ctx.request_file.write_all(&request::serialize(msg)?)?;
 
         read_response::<T, File>(&mut ctx.response_file)
     }
