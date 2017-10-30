@@ -44,9 +44,9 @@ pub fn create_process(executable: &str,
                       envp: &Vec<String>,
                       config: &ProcessConfig) -> Result<Arc<Mutex<Process>>, UdiError> {
 
-    let root_dir = config.root_dir.clone().unwrap_or(DEFAULT_UDI_ROOT_DIR.to_owned());
+    let base_root_dir = config.root_dir.clone().unwrap_or(DEFAULT_UDI_ROOT_DIR.to_owned());
 
-    create_root_udi_filesystem(&root_dir)?;
+    let root_dir = create_root_udi_filesystem(&base_root_dir)?;
 
     let mut child = launch_process(executable, argv, envp, &root_dir)?;
     let pid = child.id();
@@ -102,7 +102,10 @@ fn initialize_process(child: &mut ::std::process::Child, root_dir: String)
 
     // order matters here because POSIX FIFOs block in open calls
 
-    let mut request_file = fs::File::open(request_path)?;
+    let mut request_file = fs::OpenOptions::new().read(false)
+                                                 .create(false)
+                                                 .write(true)
+                                                 .open(request_path)?;
 
     request_file.write_all(&protocol::request::serialize(&request::Init::new())?)?;
 
@@ -153,7 +156,10 @@ pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<(), UdiError
     response_path_buf.push(RESPONSE_FILE_NAME);
     let response_path = response_path_buf.as_path();
 
-    let mut request_file = fs::File::open(request_path)?;
+    let mut request_file = fs::OpenOptions::new().read(false)
+                                                 .create(false)
+                                                 .write(true)
+                                                 .open(request_path)?;
 
     request_file.write_all(&protocol::request::serialize(&request::Init::new())?)?;
 
@@ -218,6 +224,7 @@ fn create_environment(envp: &Vec<String>, root_dir: &str) -> Vec<(String, String
     }
 
     // Update LD_PRELOAD to include the runtime library
+    let mut updated_ld_preload = false;
     for item in &mut output {
         let k = &item.0;
         let v = &mut item.1;
@@ -225,7 +232,12 @@ fn create_environment(envp: &Vec<String>, root_dir: &str) -> Vec<(String, String
         if k == "LD_PRELOAD" {
             v.push_str(":");
             v.push_str(DEFAULT_UDI_RT_LIB_NAME);
+            updated_ld_preload = true;
         }
+    }
+
+    if !updated_ld_preload {
+        output.push(("LD_PRELOAD".to_owned(), DEFAULT_UDI_RT_LIB_NAME.to_owned()));
     }
 
     output.push((UDI_ROOT_DIR_ENV.to_owned(), root_dir.to_owned()));
@@ -234,7 +246,7 @@ fn create_environment(envp: &Vec<String>, root_dir: &str) -> Vec<(String, String
 }
 
 /// Creates the root UDI filesystem for the user
-fn create_root_udi_filesystem(root_dir: &String) -> Result<(), UdiError> {
+fn create_root_udi_filesystem(root_dir: &String) -> Result<String, UdiError> {
     mkdir_ignore_exists(Path::new(root_dir))?;
 
     let user = users::get_current_username()
@@ -243,7 +255,13 @@ fn create_root_udi_filesystem(root_dir: &String) -> Result<(), UdiError> {
     let mut user_dir_path = PathBuf::from(root_dir);
     user_dir_path.push(user);
 
-    mkdir_ignore_exists(user_dir_path.as_path())
+    mkdir_ignore_exists(user_dir_path.as_path())?;
+
+    if let Some(user_dir_path_str) = user_dir_path.to_str() {
+        Ok(user_dir_path_str.to_owned())
+    } else {
+        Err(UdiError::Library("Invalid root UDI filesystem path".to_owned()))
+    }
 }
 
 /// Create the specified directory, ignoring the error if it already exists

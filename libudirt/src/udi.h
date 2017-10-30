@@ -189,8 +189,8 @@ typedef struct single_step_req_struct {
  */
 typedef enum
 {
-    UDI_RESP_ERROR = 0,
-    UDI_RESP_VALID,
+    UDI_RESP_VALID = 0,
+    UDI_RESP_ERROR = 1,
     UDI_RESP_MAX
 } udi_response_type_e;
 

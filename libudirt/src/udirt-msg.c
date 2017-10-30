@@ -184,7 +184,7 @@ void set_invalid_error(void *ctx, const char *type_name) {
     state->done = 1;
     data_state->error = 1;
     snprintf(data_state->errmsg->msg, data_state->errmsg->size,
-             "received unexpected data item of type %s in map",
+             "received unexpected data item of type %s",
              type_name);
 }
 
@@ -954,10 +954,16 @@ void request_type_callback(void *ctx, uint16_t value) {
 }
 
 static
+void request_type_uint8_callback(void *ctx, uint8_t value) {
+    request_type_callback(ctx, value);
+}
+
+static
 int read_request_type(udirt_fd req_fd, udi_request_type_e *type, udi_errmsg *errmsg) {
 
     struct cbor_callbacks callbacks = invalid_callbacks;
     callbacks.uint16 = request_type_callback;
+    callbacks.uint8 = request_type_uint8_callback;
 
     struct req_data_state data_state;
     memset(&data_state, 0, sizeof(data_state));

@@ -41,7 +41,6 @@ const char * const UDI_DS = "/";
 const unsigned int DS_LEN = 1;
 const char * const DEFAULT_UDI_ROOT_DIR = "/tmp/udi";
 static const unsigned int PID_STR_LEN = 10;
-static const unsigned int USER_STR_LEN = 25;
 
 // file paths
 static char *basedir_name;
@@ -655,8 +654,8 @@ static int create_udi_filesystem() {
         }
 
         // create the directory for this process
-        size_t basedir_length = strlen(UDI_ROOT_DIR) + PID_STR_LEN 
-            + USER_STR_LEN + 2*DS_LEN + 1;
+        size_t basedir_length = strlen(UDI_ROOT_DIR) + PID_STR_LEN
+            + 1*DS_LEN + 1;
         basedir_name = (char *)udi_malloc(basedir_length);
         if (basedir_name == NULL) {
             udi_printf("malloc failed: %s\n", strerror(errno));
@@ -664,16 +663,11 @@ static int create_udi_filesystem() {
             break;
         }
 
-        uid_t user_id = geteuid();
-        struct passwd *passwd_info = getpwuid(user_id);
-        if (passwd_info == NULL) {
-            udi_printf("getpwuid failed: %s\n", strerror(errno));
-            errnum = errno;
-            break;
-        }
-    
-        snprintf(basedir_name, basedir_length, "%s/%s/%d", UDI_ROOT_DIR,
-                 passwd_info->pw_name, getpid());
+        snprintf(basedir_name,
+                 basedir_length,
+                 "%s/%d",
+                 UDI_ROOT_DIR,
+                 getpid());
         if (mkdir(basedir_name, S_IRWXG | S_IRWXU) == -1) {
             udi_printf("error creating basedir '%s': %s\n", basedir_name,
                     strerror(errno));
@@ -691,8 +685,12 @@ static int create_udi_filesystem() {
             break;
         }
 
-        snprintf(requestfile_name, requestfile_length, "%s/%s/%d/%s",
-                 UDI_ROOT_DIR, passwd_info->pw_name, getpid(), REQUEST_FILE_NAME);
+        snprintf(requestfile_name,
+                 requestfile_length,
+                 "%s/%d/%s",
+                 UDI_ROOT_DIR,
+                 getpid(),
+                 REQUEST_FILE_NAME);
         if (mkfifo(requestfile_name, S_IRWXG | S_IRWXU) == -1) {
             udi_printf("error creating request file fifo: %s\n",
                        strerror(errno));
@@ -710,8 +708,12 @@ static int create_udi_filesystem() {
             break;
         }
 
-        snprintf(responsefile_name, responsefile_length, "%s/%s/%d/%s",
-                 UDI_ROOT_DIR, passwd_info->pw_name, getpid(), RESPONSE_FILE_NAME);
+        snprintf(responsefile_name,
+                 responsefile_length,
+                 "%s/%d/%s",
+                 UDI_ROOT_DIR,
+                 getpid(),
+                 RESPONSE_FILE_NAME);
         if (mkfifo(responsefile_name, S_IRWXG | S_IRWXU) == -1) {
             udi_printf("error creating response file fifo: %s\n",
                        strerror(errno));
@@ -729,8 +731,12 @@ static int create_udi_filesystem() {
             break;
         }
 
-        snprintf(eventsfile_name, eventsfile_length, "%s/%s/%d/%s",
-                 UDI_ROOT_DIR, passwd_info->pw_name, getpid(), EVENTS_FILE_NAME);
+        snprintf(eventsfile_name,
+                 eventsfile_length,
+                 "%s/%d/%s",
+                 UDI_ROOT_DIR,
+                 getpid(),
+                 EVENTS_FILE_NAME);
         if (mkfifo(eventsfile_name, S_IRWXG | S_IRWXU) == -1) {
             udi_printf("error creating event file fifo: %s\n",
                        strerror(errno));
@@ -1113,6 +1119,7 @@ int thread_create_response_fd_callback(void *ctx, udirt_fd *resp_fd, udi_errmsg 
         return RESULT_ERROR;
     }
 
+    *resp_fd = resp_ctx->thr->response_handle;
     return RESULT_SUCCESS;
 }
 
@@ -1159,9 +1166,13 @@ int thread_create_handshake(thread *thr, udi_errmsg *errmsg) {
             break;
         }
 
+        struct thr_resp_ctx resp_ctx;
+        resp_ctx.thr = thr;
+        resp_ctx.response_file = response_file;
+
         result = perform_init_handshake(thr->request_handle,
                                         thread_create_response_fd_callback,
-                                        thr,
+                                        &resp_ctx,
                                         thr->id,
                                         errmsg);
         if (result != RESULT_SUCCESS) {
@@ -1317,7 +1328,7 @@ int process_response_fd_callback(void *ctx, udirt_fd *resp_fd, udi_errmsg *errms
     if (events_handle == -1) {
         snprintf(errmsg->msg,
                  errmsg->size,
-                 "error openining response file fifo: %s",
+                 "error opening response file fifo: %s",
                  strerror(errno));
         return RESULT_ERROR;
     }
@@ -1494,6 +1505,14 @@ int read_from(udirt_fd fd, uint8_t *dst, size_t length)
         total += num_read;
     }
 
+    if (udi_debug_on) {
+        udi_printf_noprefix("IN ");
+        for (int i = 0; i < length; ++i) {
+            udi_printf_noprefix(" %02hhx ", dst[i]);
+        }
+        udi_printf_noprefix("\n");
+    }
+
     return 0;
 }
 
@@ -1552,6 +1571,16 @@ int write_to(udirt_fd fd, const uint8_t *src, size_t length) {
 
     if (errnum == EPIPE) {
         handle_pipe_write_failure();
+    }
+
+    if (errnum == 0) {
+        if (udi_debug_on) {
+            udi_printf_noprefix("OUT ");
+            for (int i = 0; i < length; ++i) {
+                udi_printf_noprefix(" %02hhx ", src[i]);
+            }
+            udi_printf_noprefix("\n");
+        }
     }
 
     return errnum;

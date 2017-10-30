@@ -280,6 +280,13 @@ int handle_fork_event(uint64_t tid, uint32_t pid, udi_errmsg *errmsg);
         }\
     }while(0)
 
+#define udi_printf_noprefix(format, ...) \
+    do {\
+        if ( udi_debug_on ) {\
+            fprintf(stderr, format, ## __VA_ARGS__);\
+        }\
+    }while(0)
+
 #ifdef __cplusplus
 } // extern C
 #endif

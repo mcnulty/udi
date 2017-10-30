@@ -479,7 +479,7 @@ pub mod response {
 
 pub fn read_response<T: DeserializeOwned, R: Read>(reader: &mut R) -> Result<T, UdiError> {
     let mut de = Deserializer::new(reader);
-    
+
     let response_type: response::Type = Deserialize::deserialize(&mut de)?;
     <request::Type as Deserialize>::deserialize(&mut de)?;
 
