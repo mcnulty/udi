@@ -75,7 +75,6 @@ typedef enum {
     UDI_X86_ST5,
     UDI_X86_ST6,
     UDI_X86_ST7,
-    UDI_X86_MAX,
 
     //UDI_X86_64 registers
     UDI_X86_64_MIN,
@@ -122,8 +121,6 @@ typedef enum {
     UDI_X86_64_XMM13,
     UDI_X86_64_XMM14,
     UDI_X86_64_XMM15,
-    UDI_X86_64_MAX
-
 } udi_register_e;
 
 /*
@@ -131,7 +128,8 @@ typedef enum {
  */
 typedef enum
 {
-    UDI_REQ_CONTINUE = 0,
+    UDI_REQ_INVALID = 0,
+    UDI_REQ_CONTINUE,
     UDI_REQ_READ_MEM,
     UDI_REQ_WRITE_MEM,
     UDI_REQ_READ_REGISTER,
@@ -146,8 +144,6 @@ typedef enum
     UDI_REQ_THREAD_RESUME,
     UDI_REQ_NEXT_INSTRUCTION,
     UDI_REQ_SINGLE_STEP,
-    UDI_REQ_MAX,
-    UDI_REQ_INVALID,
 } udi_request_type_e;
 
 /* request payloads */
@@ -190,8 +186,7 @@ typedef struct single_step_req_struct {
 typedef enum
 {
     UDI_RESP_VALID = 0,
-    UDI_RESP_ERROR = 1,
-    UDI_RESP_MAX
+    UDI_RESP_ERROR = 1
 } udi_response_type_e;
 
 /* response payloads */
@@ -235,7 +230,8 @@ typedef struct single_step_resp_struct {
  */
 typedef enum
 {
-    UDI_EVENT_ERROR = 0,
+    UDI_EVENT_UNKNOWN = 0,
+    UDI_EVENT_ERROR,
     UDI_EVENT_SIGNAL,
     UDI_EVENT_BREAKPOINT,
     UDI_EVENT_THREAD_CREATE,
@@ -245,8 +241,6 @@ typedef enum
     UDI_EVENT_PROCESS_EXEC,
     UDI_EVENT_SINGLE_STEP,
     UDI_EVENT_PROCESS_CLEANUP,
-    UDI_EVENT_MAX,
-    UDI_EVENT_UNKNOWN
 } udi_event_type_e;
 
 /** event payloads */

@@ -291,7 +291,7 @@ int wait_and_execute_command(udi_errmsg *errmsg, thread **thr) {
             break;
         }
 
-        udi_request_type_e type = UDI_REQ_MAX;
+        udi_request_type_e type = UDI_REQ_INVALID;
         if ( *thr == NULL ) {
             udi_printf("%s\n", "received process request");
             result = handle_process_request(request_handle,

@@ -352,6 +352,7 @@ udi_version_e get_protocol_version() {
 
 const char *request_type_str(udi_request_type_e req_type) {
     switch(req_type) {
+        CASE_TO_STR(UDI_REQ_INVALID);
         CASE_TO_STR(UDI_REQ_CONTINUE);
         CASE_TO_STR(UDI_REQ_READ_MEM);
         CASE_TO_STR(UDI_REQ_WRITE_MEM);
@@ -367,14 +368,13 @@ const char *request_type_str(udi_request_type_e req_type) {
         CASE_TO_STR(UDI_REQ_WRITE_REGISTER);
         CASE_TO_STR(UDI_REQ_NEXT_INSTRUCTION);
         CASE_TO_STR(UDI_REQ_SINGLE_STEP);
-        CASE_TO_STR(UDI_REQ_MAX);
-        CASE_TO_STR(UDI_REQ_INVALID);
         default: return "UNKNOWN";
     }
 }
 
 const char *event_type_str(udi_event_type_e event_type) {
     switch(event_type) {
+        CASE_TO_STR(UDI_EVENT_UNKNOWN);
         CASE_TO_STR(UDI_EVENT_ERROR);
         CASE_TO_STR(UDI_EVENT_SIGNAL);
         CASE_TO_STR(UDI_EVENT_BREAKPOINT);
@@ -384,8 +384,6 @@ const char *event_type_str(udi_event_type_e event_type) {
         CASE_TO_STR(UDI_EVENT_PROCESS_FORK);
         CASE_TO_STR(UDI_EVENT_PROCESS_EXEC);
         CASE_TO_STR(UDI_EVENT_SINGLE_STEP);
-        CASE_TO_STR(UDI_EVENT_MAX);
-        CASE_TO_STR(UDI_EVENT_UNKNOWN);
         default: return "UNSPECIFIED";
     }
 }
@@ -425,7 +423,6 @@ const char *register_str(udi_register_e reg) {
         CASE_TO_STR(UDI_X86_ST5);
         CASE_TO_STR(UDI_X86_ST6);
         CASE_TO_STR(UDI_X86_ST7);
-        CASE_TO_STR(UDI_X86_MAX);
         CASE_TO_STR(UDI_X86_64_MIN);
         CASE_TO_STR(UDI_X86_64_R8);
         CASE_TO_STR(UDI_X86_64_R9);
@@ -470,7 +467,6 @@ const char *register_str(udi_register_e reg) {
         CASE_TO_STR(UDI_X86_64_XMM13);
         CASE_TO_STR(UDI_X86_64_XMM14);
         CASE_TO_STR(UDI_X86_64_XMM15);
-        CASE_TO_STR(UDI_X86_64_MAX);
         default: return "UNSPECIFIED";
     }
 }
