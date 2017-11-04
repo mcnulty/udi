@@ -22,7 +22,7 @@ use udi::Event;
 use udi::Error;
 
 pub fn print_error(e: Error) {
-    println!("error: {}", e);
+    println!("test failed: {}", e);
 
     for e in e.iter().skip(1) {
         println!("caused by: {}", e);
