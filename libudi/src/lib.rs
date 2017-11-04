@@ -6,12 +6,15 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
 #![deny(warnings)]
+#![recursion_limit = "1024"]
 
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate downcast_rs;
+#[macro_use]
+extern crate error_chain;
 
 use std::fs;
 use std::sync::{Mutex, Arc};
@@ -19,13 +22,13 @@ use std::sync::{Mutex, Arc};
 use downcast_rs::Downcast;
 
 pub mod protocol;
-pub mod error;
+mod errors;
 mod create;
 mod process;
 mod thread;
 mod events;
 
-pub use error::UdiError;
+pub use errors::*;
 pub use create::create_process;
 pub use create::ProcessConfig;
 pub use events::Event;

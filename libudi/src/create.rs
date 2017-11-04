@@ -16,7 +16,7 @@ use std::path::{PathBuf, Path};
 use std::io::{self,Write};
 use std::fs;
 
-use super::error::UdiError;
+use super::errors::*;
 use super::Process;
 use super::ProcessFileContext;
 use super::Thread;
@@ -42,7 +42,7 @@ pub struct ProcessConfig {
 pub fn create_process(executable: &str,
                       argv: &Vec<String>,
                       envp: &Vec<String>,
-                      config: &ProcessConfig) -> Result<Arc<Mutex<Process>>, UdiError> {
+                      config: &ProcessConfig) -> Result<Arc<Mutex<Process>>> {
 
     let base_root_dir = config.root_dir.clone().unwrap_or(DEFAULT_UDI_ROOT_DIR.to_owned());
 
@@ -60,7 +60,7 @@ pub fn create_process(executable: &str,
 }
 
 fn initialize_process(child: &mut ::std::process::Child, root_dir: String)
-    -> Result<Process, UdiError> {
+    -> Result<Process> {
 
     let pid = child.id();
 
@@ -82,8 +82,8 @@ fn initialize_process(child: &mut ::std::process::Child, root_dir: String)
     while !event_file_exists {
         match child.try_wait()? {
             Some(status) => {
-                return Err(UdiError::Library(
-                        format!("Process failed to initialize, exited with status: {}", status)))
+                let msg = format!("Process failed to initialize, exited with status: {}", status);
+                return Err(ErrorKind::Library(msg).into());
             },
             None => {
             }
@@ -135,17 +135,17 @@ fn initialize_process(child: &mut ::std::process::Child, root_dir: String)
     Ok(process)
 }
 
-fn determine_protocol(init: &response::Init) -> Result<u32, UdiError> {
+fn determine_protocol(init: &response::Init) -> Result<u32> {
     if init.v != protocol::UDI_PROTOCOL_VERSION_1 {
-        return Err(UdiError::Library(format!("Debuggee expects unsupported protocol version: {}",
-                                  init.v)))
+        let msg = format!("Debuggee expects unsupported protocol version: {}", init.v);
+        return Err(ErrorKind::Library(msg).into());
     }
 
     Ok(init.v)
 }
 
 /// Performs the init handshake for the new thread and adds it to the specified process
-pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<(), UdiError> {
+pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<()> {
     let mut request_path_buf = PathBuf::from(&process.root_dir);
     request_path_buf.push(format!("{:x}", tid));
     request_path_buf.push(REQUEST_FILE_NAME);
@@ -186,7 +186,7 @@ pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<(), UdiError
 fn launch_process(executable: &str,
                   argv: &Vec<String>,
                   envp: &Vec<String>,
-                  root_dir: &str) -> Result<::std::process::Child, UdiError> {
+                  root_dir: &str) -> Result<::std::process::Child> {
 
     let mut command = ::std::process::Command::new(executable);
 
@@ -246,11 +246,11 @@ fn create_environment(envp: &Vec<String>, root_dir: &str) -> Vec<(String, String
 }
 
 /// Creates the root UDI filesystem for the user
-fn create_root_udi_filesystem(root_dir: &String) -> Result<String, UdiError> {
+fn create_root_udi_filesystem(root_dir: &String) -> Result<String> {
     mkdir_ignore_exists(Path::new(root_dir))?;
 
     let user = users::get_current_username()
-        .ok_or(UdiError::Library("Failed to retrieve username".to_owned()))?;
+        .ok_or(Error::from_kind(ErrorKind::Library("Failed to retrieve username".to_owned())))?;
 
     let mut user_dir_path = PathBuf::from(root_dir);
     user_dir_path.push(user);
@@ -260,12 +260,12 @@ fn create_root_udi_filesystem(root_dir: &String) -> Result<String, UdiError> {
     if let Some(user_dir_path_str) = user_dir_path.to_str() {
         Ok(user_dir_path_str.to_owned())
     } else {
-        Err(UdiError::Library("Invalid root UDI filesystem path".to_owned()))
+        Err(ErrorKind::Library("Invalid root UDI filesystem path".to_owned()).into())
     }
 }
 
 /// Create the specified directory, ignoring the error if it already exists
-fn mkdir_ignore_exists(dir: &Path) -> Result<(), UdiError> {
+fn mkdir_ignore_exists(dir: &Path) -> Result<()> {
     match fs::create_dir(dir) {
         Ok(_) => Ok(()),
         Err(e) => match e.kind() {

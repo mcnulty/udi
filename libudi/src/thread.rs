@@ -12,8 +12,8 @@
 use ::std::fs::File;
 use ::std::io::Write;
 
+use super::errors::*;
 use super::Thread;
-use super::error::UdiError;
 use super::protocol::Register;
 use super::protocol::request;
 use super::protocol::response;
@@ -42,7 +42,7 @@ impl Thread {
         self.state
     }
 
-    pub fn get_pc(&mut self) -> Result<u64, UdiError> {
+    pub fn get_pc(&mut self) -> Result<u64> {
         let reg = match self.architecture {
             Architecture::X86 => Register::X86_EIP,
             Architecture::X86_64 => Register::X86_64_RIP
@@ -51,7 +51,7 @@ impl Thread {
         self.read_register(reg)
     }
 
-    pub fn set_single_step(&mut self, setting: bool) -> Result<(), UdiError> {
+    pub fn set_single_step(&mut self, setting: bool) -> Result<()> {
         let msg = request::SingleStep::new(setting);
 
         self.send_request::<response::SingleStep, _>(&msg)?;
@@ -59,7 +59,7 @@ impl Thread {
         Ok(())
     }
 
-    pub fn get_next_instruction(&mut self) -> Result<u64, UdiError> {
+    pub fn get_next_instruction(&mut self) -> Result<u64> {
         let msg = request::NextInstruction::new();
 
         let resp: response::NextInstruction = self.send_request(&msg)?;
@@ -67,7 +67,7 @@ impl Thread {
         Ok(resp.addr)
     }
 
-    pub fn suspend(&mut self) -> Result<(), UdiError> {
+    pub fn suspend(&mut self) -> Result<()> {
         let msg = request::ThreadSuspend::new();
 
         self.send_request::<response::ThreadSuspend, _>(&msg)?;
@@ -75,14 +75,14 @@ impl Thread {
         Ok(())
     }
 
-    pub fn resume(&mut self) -> Result<(), UdiError> {
+    pub fn resume(&mut self) -> Result<()> {
         let msg = request::ThreadResume::new();
 
         self.send_request::<request::ThreadResume, _>(&msg)?;
         Ok(())
     }
 
-    pub fn read_register(&mut self, reg: Register) -> Result<u64, UdiError> {
+    pub fn read_register(&mut self, reg: Register) -> Result<u64> {
         let msg = request::ReadRegister::new(reg as u32);
 
         let resp: response::ReadRegister = self.send_request(&msg)?;
@@ -90,7 +90,7 @@ impl Thread {
         Ok(resp.value)
     }
 
-    pub fn write_register(&mut self, reg: Register, value: u64) -> Result<(), UdiError> {
+    pub fn write_register(&mut self, reg: Register, value: u64) -> Result<()> {
         let msg = request::WriteRegister::new(reg as u32, value);
 
         self.send_request::<response::WriteRegister, _>(&msg)?;
@@ -99,13 +99,13 @@ impl Thread {
     }
 
     fn send_request<T: DeserializeOwned, S: request::RequestType + Serialize>(&mut self, msg: &S)
-            -> Result<T, UdiError> {
+            -> Result<T> {
         let ctx = match self.file_context.as_mut() {
             Some(ctx) => ctx,
             None => {
-                return Err(UdiError::Request(
-                        format!("Thread {:?} terminated, cannot performed requested operation",
-                                self.tid)));
+                let msg = format!("Thread {:?} terminated, cannot performed requested operation",
+                                  self.tid);
+                return Err(ErrorKind::Request(msg).into());
             }
         };
 
@@ -114,9 +114,6 @@ impl Thread {
         read_response::<T, File>(&mut ctx.response_file)
     }
 }
-
-
-
 
 impl PartialEq for Thread {
     fn eq(&self, other: &Thread) -> bool {

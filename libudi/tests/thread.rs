@@ -13,7 +13,7 @@ extern crate udi;
 mod native_file_tests;
 mod utils;
 
-use udi::UdiError;
+use udi::Result;
 use udi::EventData;
 use udi::ThreadState;
 
@@ -22,11 +22,12 @@ const NUM_THREADS: u8 = 10;
 #[test]
 fn thread() {
     if let Err(e) = thread_test() {
-        panic!(e.to_string());
+        utils::print_error(e);
+        panic!("thread test failed");
     }
 }
 
-fn thread_test() -> Result<(), UdiError> {
+fn thread_test() -> Result<()> {
 
     let binary_path = native_file_tests::WAITTHREAD_EXEC_PATH;
 

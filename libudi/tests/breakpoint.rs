@@ -13,12 +13,13 @@ extern crate udi;
 mod native_file_tests;
 mod utils;
 
-use udi::UdiError;
+use udi::Result;
 
 #[test]
 fn breakpoint() {
     if let Err(e) = breakpoint_test() {
-        panic!(e.to_string());
+        utils::print_error(e);
+        panic!("breakpoint test failed");
     }
 }
 

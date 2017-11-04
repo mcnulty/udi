@@ -13,16 +13,17 @@ extern crate udi;
 mod native_file_tests;
 mod utils;
 
-use udi::UdiError;
+use udi::Result;
 
 #[test]
 fn create() {
     if let Err(e) = create_test() {
-        panic!(e.to_string());
+        utils::print_error(e);
+        panic!("create test failed");
     }
 }
 
-fn create_test() -> Result<(), UdiError> {
+fn create_test() -> Result<()> {
 
     let config = udi::ProcessConfig{ root_dir: None };
     let argv = Vec::new();

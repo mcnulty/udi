@@ -15,10 +15,10 @@ use std::collections::HashMap;
 
 use self::mio::{Poll, Events, Ready, PollOpt, Token};
 
+use super::errors::*;
 use super::Process;
 use super::Thread;
 use super::create::initialize_thread;
-use super::error::UdiError;
 use super::protocol::event::EventData;
 use super::protocol::event::EventMessage;
 use super::protocol::read_event;
@@ -36,7 +36,7 @@ struct ProcessContext<'a> {
     process: MutexGuard<'a, Process>
 }
 
-pub fn wait_for_events(procs: &Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>, UdiError> {
+pub fn wait_for_events(procs: &Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>> {
 
     let poll = Poll::new()?;
     let mut event_procs = HashMap::new();
@@ -73,7 +73,7 @@ pub fn wait_for_events(procs: &Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>, U
                     output.push(event);
                 }else{
                     let msg = format!("Unknown event token {:?}", event_token);
-                    return Err(UdiError::Library(msg));
+                    return Err(Error::from_kind(ErrorKind::Library(msg)));
                 }
             }
         }
@@ -82,8 +82,7 @@ pub fn wait_for_events(procs: &Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>, U
     Ok(output)
 }
 
-fn handle_read_event(ctx: &mut ProcessContext)
-    -> Result<Event, UdiError> {
+fn handle_read_event(ctx: &mut ProcessContext) -> Result<Event> {
 
     match read_event(&mut ctx.process.get_file_context()?.events_file) {
         Ok(event_msg) => {
@@ -105,8 +104,7 @@ fn handle_read_event(ctx: &mut ProcessContext)
     }
 }
 
-fn handle_event_message(ctx: &mut ProcessContext, message: EventMessage)
-    -> Result<Event, UdiError> {
+fn handle_event_message(ctx: &mut ProcessContext, message: EventMessage) -> Result<Event> {
 
     ctx.process.running = false;
 
@@ -129,7 +127,7 @@ fn handle_event_message(ctx: &mut ProcessContext, message: EventMessage)
         },
         None => {
             let msg = format!("Failed to locate event thread with tid {:?}", message.tid);
-            return Err(UdiError::Library(msg));
+            return Err(Error::from_kind(ErrorKind::Library(msg)));
         }
     };
 

@@ -17,7 +17,7 @@ use ::std::fs::File;
 use super::serde::de::DeserializeOwned;
 use super::serde::Serialize;
 
-use super::error::UdiError;
+use super::errors::*;
 use super::Process;
 use super::ProcessFileContext;
 use super::Thread;
@@ -65,7 +65,7 @@ impl Process {
         self.user_data.as_mut()
     }
 
-    pub fn continue_process(&mut self) -> Result<(), UdiError> {
+    pub fn continue_process(&mut self) -> Result<()> {
         let msg = request::Continue::new(0);
 
         if self.terminating {
@@ -82,7 +82,7 @@ impl Process {
         Ok(())
     }
 
-    pub fn create_breakpoint(&mut self, addr: u64) -> Result<(), UdiError> {
+    pub fn create_breakpoint(&mut self, addr: u64) -> Result<()> {
         let msg = request::CreateBreakpoint::new(addr);
 
         self.send_request::<response::CreateBreakpoint, _>(&msg)?;
@@ -90,7 +90,7 @@ impl Process {
         Ok(())
     }
 
-    pub fn install_breakpoint(&mut self, addr: u64) -> Result<(), UdiError> {
+    pub fn install_breakpoint(&mut self, addr: u64) -> Result<()> {
         let msg = request::InstallBreakpoint::new(addr);
 
         self.send_request::<response::InstallBreakpoint, _>(&msg)?;
@@ -98,7 +98,7 @@ impl Process {
         Ok(())
     }
 
-    pub fn remove_breakpoint(&mut self, addr: u64) -> Result<(), UdiError> {
+    pub fn remove_breakpoint(&mut self, addr: u64) -> Result<()> {
         let msg = request::RemoveBreakpoint::new(addr);
 
         self.send_request::<response::RemoveBreakpoint, _>(&msg)?;
@@ -106,7 +106,7 @@ impl Process {
         Ok(())
     }
 
-    pub fn delete_breakpoint(&mut self, addr: u64) -> Result<(), UdiError> {
+    pub fn delete_breakpoint(&mut self, addr: u64) -> Result<()> {
         let msg = request::DeleteBreakpoint::new(addr);
 
         self.send_request::<response::DeleteBreakpoint, _>(&msg)?;
@@ -114,7 +114,7 @@ impl Process {
         Ok(())
     }
 
-    pub fn refresh_state(&mut self) -> Result<(), UdiError> {
+    pub fn refresh_state(&mut self) -> Result<()> {
         let msg = request::State::new();
 
         let resp: response::States = self.send_request(&msg)?;
@@ -135,7 +135,7 @@ impl Process {
         Ok(())
     }
 
-    pub fn write_mem(&mut self, data: &[u8], addr: u64) -> Result<(), UdiError> {
+    pub fn write_mem(&mut self, data: &[u8], addr: u64) -> Result<()> {
         let msg = request::WriteMemory::new(addr, data);
 
         self.send_request::<response::WriteMemory, _>(&msg)?;
@@ -143,7 +143,7 @@ impl Process {
         Ok(())
     }
 
-    pub fn read_mem(&mut self, size: u32, addr: u64) -> Result<Vec<u8>, UdiError> {
+    pub fn read_mem(&mut self, size: u32, addr: u64) -> Result<Vec<u8>> {
         let msg = request::ReadMemory::new(addr, size);
 
         let resp: response::ReadMemory = self.send_request(&msg)?;
@@ -152,7 +152,7 @@ impl Process {
     }
 
     fn send_request<T: DeserializeOwned, S: request::RequestType + Serialize>(&mut self, msg: &S)
-            -> Result<T, UdiError> {
+            -> Result<T> {
         let ctx = self.get_file_context()?;
 
         ctx.request_file.write_all(&request::serialize(msg)?)?;
@@ -160,13 +160,13 @@ impl Process {
         read_response::<T, File>(&mut ctx.response_file)
     }
 
-    pub(crate) fn get_file_context(&mut self) -> Result<&mut ProcessFileContext, UdiError> {
+    pub(crate) fn get_file_context(&mut self) -> Result<&mut ProcessFileContext> {
         match self.file_context.as_mut() {
             Some(ctx) => Ok(ctx),
             None => {
-                Err(UdiError::Request(
-                        format!("Process {:?} terminated, cannot performed requested operation",
-                                self.pid)))
+                let msg = format!("Process {:?} terminated, cannot performed requested operation",
+                                  self.pid);
+                Err(ErrorKind::Request(msg).into())
             }
         }
     }

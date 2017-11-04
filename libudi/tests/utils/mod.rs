@@ -19,6 +19,19 @@ use udi::ThreadState;
 use udi::EventData;
 use udi::wait_for_events;
 use udi::Event;
+use udi::Error;
+
+pub fn print_error(e: Error) {
+    println!("error: {}", e);
+
+    for e in e.iter().skip(1) {
+        println!("caused by: {}", e);
+    }
+
+    if let Some(backtrace) = e.backtrace() {
+        println!("backtrace: {:?}", backtrace);
+    }
+}
 
 pub fn wait_for_exit(process: &Arc<Mutex<Process>>,
                      thread: &Arc<Mutex<Thread>>,

@@ -13,16 +13,17 @@ extern crate udi;
 mod native_file_tests;
 mod utils;
 
-use udi::UdiError;
+use udi::Result;
 
 #[test]
 fn singlestep() {
     if let Err(e) = singlestep_test() {
-        panic!(e.to_string());
+        utils::print_error(e);
+        panic!("singlestep test failed");
     }
 }
 
-fn singlestep_test() -> Result<(), UdiError> {
+fn singlestep_test() -> Result<()> {
     let addr = native_file_tests::SIMPLE_FUNCTION2;
     let len = native_file_tests::SIMPLE_FUNCTION2_LENGTH;
 

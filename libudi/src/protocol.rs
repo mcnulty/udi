@@ -11,13 +11,13 @@
 
 extern crate serde_cbor;
 
-use std::io::{Read,ErrorKind};
+use std::io;
 
 use serde::de::{Deserialize, DeserializeOwned};
 use serde::ser::Serialize;
 use self::serde_cbor::de::Deserializer;
 
-use super::error::UdiError;
+use super::errors::*;
 
 pub const UDI_PROTOCOL_VERSION_1: u32 = 1;
 
@@ -30,7 +30,7 @@ macro_rules! enum_number {
         }
 
         impl ::serde::Serialize for $name {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
                 where S: ::serde::Serializer
             {
                 // Serialize the enum as a u16.
@@ -39,7 +39,7 @@ macro_rules! enum_number {
         }
 
         impl<'de> ::serde::Deserialize<'de> for $name {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
                 where D: ::serde::Deserializer<'de>
             {
                 struct Visitor;
@@ -51,7 +51,7 @@ macro_rules! enum_number {
                         formatter.write_str("positive integer")
                     }
 
-                    fn visit_u16<E>(self, value: u16) -> Result<$name, E>
+                    fn visit_u16<E>(self, value: u16) -> ::std::result::Result<$name, E>
                         where E: ::serde::de::Error
                     {
                         // Rust does not come with a simple way of converting a
@@ -388,7 +388,7 @@ pub mod request {
     }
 
     pub fn serialize<T: super::Serialize + RequestType>(req: &T)
-            -> Result<Vec<u8>, super::UdiError> {
+            -> super::Result<Vec<u8>> {
         let mut output: Vec<u8> = Vec::new();
 
         super::serde_cbor::ser::to_writer(&mut output, &req.typ())?;
@@ -478,7 +478,7 @@ pub mod response {
     }
 }
 
-pub fn read_response<T: DeserializeOwned, R: Read>(reader: &mut R) -> Result<T, UdiError> {
+pub fn read_response<T: DeserializeOwned, R: io::Read>(reader: &mut R) -> Result<T> {
     let mut de = Deserializer::new(reader);
 
     let response_type: response::Type = Deserialize::deserialize(&mut de)?;
@@ -488,7 +488,7 @@ pub fn read_response<T: DeserializeOwned, R: Read>(reader: &mut R) -> Result<T, 
         response::Type::Valid => Ok(Deserialize::deserialize(&mut de)?),
         response::Type::Error => {
             let err: response::ResponseError = Deserialize::deserialize(&mut de)?;
-            Err(UdiError::Request(err.msg))
+            Err(ErrorKind::Request(err.msg).into())
         }
     }
 }
@@ -571,7 +571,7 @@ pub mod event {
 #[derive(Debug)]
 pub enum EventReadError {
     Eof,
-    Udi(UdiError)
+    Udi(Error)
 }
 
 impl From<serde_cbor::Error> for EventReadError {
@@ -579,7 +579,7 @@ impl From<serde_cbor::Error> for EventReadError {
         match err {
             serde_cbor::Error::Io(ioe) => {
                 match ioe.kind() {
-                    ErrorKind::UnexpectedEof => EventReadError::Eof,
+                    io::ErrorKind::UnexpectedEof => EventReadError::Eof,
                     _ => EventReadError::Udi(::std::convert::From::from(ioe))
                 }
             },
@@ -588,7 +588,9 @@ impl From<serde_cbor::Error> for EventReadError {
     }
 }
 
-pub fn read_event<R: Read>(reader: R) -> Result<event::EventMessage, EventReadError> {
+pub fn read_event<R: io::Read>(reader: R)
+    -> ::std::result::Result<event::EventMessage, EventReadError> {
+
     let mut de = Deserializer::new(reader);
 
     let event_type: event::Type = Deserialize::deserialize(&mut de)?;
@@ -599,12 +601,13 @@ pub fn read_event<R: Read>(reader: R) -> Result<event::EventMessage, EventReadEr
     Ok(event::EventMessage{ tid: tid, data: data })
 }
 
-fn deserialize_event_data<R: Read>(de: &mut Deserializer<R>, event_type: &event::Type)
-    -> Result<event::EventData, EventReadError> {
+fn deserialize_event_data<R: io::Read>(de: &mut Deserializer<R>, event_type: &event::Type)
+    -> ::std::result::Result<event::EventData, EventReadError> {
 
     let event_data = match *event_type {
         event::Type::Invalid => {
-            return Err(EventReadError::Udi(UdiError::Library("Invalid event reported".to_owned())));
+            let msg = "Invalid event reported".to_owned();
+            return Err(EventReadError::Udi(ErrorKind::Library(msg).into()));
         },
         event::Type::Error => {
             let error_data: event::EventError = Deserialize::deserialize(de)?;
