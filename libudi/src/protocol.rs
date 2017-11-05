@@ -100,6 +100,10 @@ pub mod request {
 
     pub trait RequestType {
         fn typ(&self) -> Type;
+
+        fn empty(&self) -> bool {
+            false
+        }
     }
 
     #[derive(Deserialize, Serialize, Debug)]
@@ -117,6 +121,10 @@ pub mod request {
     impl RequestType for Init {
         fn typ(&self) -> Type {
             self.typ
+        }
+
+        fn empty(&self) -> bool {
+            true
         }
     }
 
@@ -310,6 +318,10 @@ pub mod request {
         fn typ(&self) -> Type {
             self.typ
         }
+
+        fn empty(&self) -> bool {
+            true
+        }
     }
 
     #[derive(Deserialize, Serialize, Debug)]
@@ -327,6 +339,10 @@ pub mod request {
     impl RequestType for ThreadResume {
         fn typ(&self) -> Type {
             self.typ
+        }
+
+        fn empty(&self) -> bool {
+            true
         }
     }
 
@@ -346,6 +362,10 @@ pub mod request {
         fn typ(&self) -> Type {
             self.typ
         }
+
+        fn empty(&self) -> bool {
+            true
+        }
     }
 
     #[derive(Deserialize, Serialize, Debug)]
@@ -363,6 +383,10 @@ pub mod request {
     impl RequestType for NextInstruction {
         fn typ(&self) -> Type {
             self.typ
+        }
+
+        fn empty(&self) -> bool {
+            true
         }
     }
 
@@ -392,7 +416,9 @@ pub mod request {
         let mut output: Vec<u8> = Vec::new();
 
         super::serde_cbor::ser::to_writer(&mut output, &req.typ())?;
-        super::serde_cbor::ser::to_writer(&mut output, req)?;
+        if !req.empty() {
+            super::serde_cbor::ser::to_writer(&mut output, req)?;
+        }
 
         Ok(output)
     }
@@ -419,36 +445,9 @@ pub mod response {
     }
 
     #[derive(Deserialize,Serialize,Debug)]
-    pub struct WriteMemory {}
-
-    #[derive(Deserialize,Serialize,Debug)]
     pub struct ReadRegister {
         pub value: u64
     }
-
-    #[derive(Deserialize,Serialize,Debug)]
-    pub struct WriteRegister {}
-
-    #[derive(Deserialize,Serialize,Debug)]
-    pub struct Continue {}
-
-    #[derive(Deserialize,Serialize,Debug)]
-    pub struct CreateBreakpoint {}
-
-    #[derive(Deserialize,Serialize,Debug)]
-    pub struct InstallBreakpoint {}
-
-    #[derive(Deserialize,Serialize,Debug)]
-    pub struct RemoveBreakpoint {}
-
-    #[derive(Deserialize,Serialize,Debug)]
-    pub struct DeleteBreakpoint {}
-
-    #[derive(Deserialize,Serialize,Debug)]
-    pub struct ThreadResume {}
-
-    #[derive(Deserialize,Serialize,Debug)]
-    pub struct ThreadSuspend {}
 
     #[derive(Deserialize,Serialize,Debug)]
     pub struct NextInstruction {
@@ -473,22 +472,38 @@ pub mod response {
 
     #[derive(Deserialize,Serialize,Debug)]
     pub struct ResponseError {
-        pub code: u32,
         pub msg: String
     }
-}
 
-pub fn read_response<T: DeserializeOwned, R: io::Read>(reader: &mut R) -> Result<T> {
-    let mut de = Deserializer::new(reader);
+    pub fn read<T: super::DeserializeOwned, R: super::io::Read>(reader: &mut R)
+        -> super::Result<T> {
 
-    let response_type: response::Type = Deserialize::deserialize(&mut de)?;
-    <request::Type as Deserialize>::deserialize(&mut de)?;
+        let mut de = super::Deserializer::new(reader);
 
-    match response_type {
-        response::Type::Valid => Ok(Deserialize::deserialize(&mut de)?),
-        response::Type::Error => {
-            let err: response::ResponseError = Deserialize::deserialize(&mut de)?;
-            Err(ErrorKind::Request(err.msg).into())
+        let response_type: Type = super::Deserialize::deserialize(&mut de)?;
+        <super::request::Type as super::Deserialize>::deserialize(&mut de)?;
+
+        match response_type {
+            Type::Valid => Ok(super::Deserialize::deserialize(&mut de)?),
+            Type::Error => {
+                let err: ResponseError = super::Deserialize::deserialize(&mut de)?;
+                Err(super::ErrorKind::Request(err.msg).into())
+            }
+        }
+    }
+
+    pub fn read_no_data<R: super::io::Read>(reader: &mut R) -> super::Result<()> {
+        let mut de = super::Deserializer::new(reader);
+
+        let response_type: Type = super::Deserialize::deserialize(&mut de)?;
+        <super::request::Type as super::Deserialize>::deserialize(&mut de)?;
+
+        match response_type {
+            Type::Valid => Ok(()),
+            Type::Error => {
+                let err: ResponseError = super::Deserialize::deserialize(&mut de)?;
+                Err(super::ErrorKind::Request(err.msg).into())
+            }
         }
     }
 }
@@ -682,50 +697,52 @@ enum_number!(Register {
     X86_ST5 = 22,
     X86_ST6 = 23,
     X86_ST7 = 24,
+    X86_MAX = 25,
 
     //X86_64 registers
-    X86_64_MIN = 25,
-    X86_64_R8 = 26,
-    X86_64_R9 = 27,
-    X86_64_R10 = 28,
-    X86_64_R11 = 29,
-    X86_64_R12 = 30,
-    X86_64_R13 = 31,
-    X86_64_R14 = 32,
-    X86_64_R15 = 33,
-    X86_64_RDI = 34,
-    X86_64_RSI = 35,
-    X86_64_RBP = 36,
-    X86_64_RBX = 37,
-    X86_64_RDX = 38,
-    X86_64_RAX = 39,
-    X86_64_RCX = 40,
-    X86_64_RSP = 41,
-    X86_64_RIP = 42,
-    X86_64_CSGSFS = 43,
-    X86_64_FLAGS = 44,
-    X86_64_ST0 = 45,
-    X86_64_ST1 = 46,
-    X86_64_ST2 = 47,
-    X86_64_ST3 = 48,
-    X86_64_ST4 = 49,
-    X86_64_ST5 = 50,
-    X86_64_ST6 = 51,
-    X86_64_ST7 = 52,
-    X86_64_XMM0 = 53,
-    X86_64_XMM1 = 54,
-    X86_64_XMM2 = 55,
-    X86_64_XMM3 = 56,
-    X86_64_XMM4 = 57,
-    X86_64_XMM5 = 58,
-    X86_64_XMM6 = 59,
-    X86_64_XMM7 = 60,
-    X86_64_XMM8 = 61,
-    X86_64_XMM9 = 62,
-    X86_64_XMM10 = 63,
-    X86_64_XMM11 = 64,
-    X86_64_XMM12 = 65,
-    X86_64_XMM13 = 66,
-    X86_64_XMM14 = 67,
-    X86_64_XMM15 = 68,
+    X86_64_MIN = 26,
+    X86_64_R8 = 27,
+    X86_64_R9 = 28,
+    X86_64_R10 = 29,
+    X86_64_R11 = 30,
+    X86_64_R12 = 31,
+    X86_64_R13 = 32,
+    X86_64_R14 = 33,
+    X86_64_R15 = 34,
+    X86_64_RDI = 35,
+    X86_64_RSI = 36,
+    X86_64_RBP = 37,
+    X86_64_RBX = 38,
+    X86_64_RDX = 39,
+    X86_64_RAX = 40,
+    X86_64_RCX = 41,
+    X86_64_RSP = 42,
+    X86_64_RIP = 43,
+    X86_64_CSGSFS = 44,
+    X86_64_FLAGS = 45,
+    X86_64_ST0 = 46,
+    X86_64_ST1 = 47,
+    X86_64_ST2 = 48,
+    X86_64_ST3 = 49,
+    X86_64_ST4 = 50,
+    X86_64_ST5 = 51,
+    X86_64_ST6 = 52,
+    X86_64_ST7 = 53,
+    X86_64_XMM0 = 54,
+    X86_64_XMM1 = 55,
+    X86_64_XMM2 = 56,
+    X86_64_XMM3 = 57,
+    X86_64_XMM4 = 58,
+    X86_64_XMM5 = 59,
+    X86_64_XMM6 = 60,
+    X86_64_XMM7 = 61,
+    X86_64_XMM8 = 62,
+    X86_64_XMM9 = 63,
+    X86_64_XMM10 = 64,
+    X86_64_XMM11 = 65,
+    X86_64_XMM12 = 66,
+    X86_64_XMM13 = 67,
+    X86_64_XMM14 = 68,
+    X86_64_XMM15 = 69,
+    X86_64_MAX = 70,
 });

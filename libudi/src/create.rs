@@ -112,7 +112,7 @@ fn initialize_process(child: &mut ::std::process::Child, root_dir: String)
     let mut response_file = fs::File::open(response_path)?;
     let events_file = fs::File::open(event_path)?;
 
-    let init: response::Init = protocol::read_response(&mut response_file)?;
+    let init: response::Init = protocol::response::read(&mut response_file)?;
 
     // Check compatibility with protocol version
     let version = determine_protocol(&init)?;
@@ -165,7 +165,7 @@ pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<()> {
 
     let mut response_file = fs::File::open(response_path)?;
 
-    protocol::read_response::<response::Init, _>(&mut response_file)?;
+    protocol::response::read::<response::Init, _>(&mut response_file)?;
 
     let thr = Thread {
         initial: process.threads.len() == 0,

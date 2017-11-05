@@ -83,7 +83,14 @@ int read_cbor_items(udirt_fd fd,
         }
 
         result = read_from(fd, buffer + buf_idx, buflen - buf_idx);
-        if (result != 0) {
+        if (result < 0) {
+            snprintf(errmsg->msg,
+                     errmsg->size,
+                     "failed to read CBOR data due to unexpected end-of-file");
+            break;
+        }
+
+        if (result > 0) {
             snprintf(errmsg->msg,
                      errmsg->size,
                      "failed to read CBOR data: %s",
@@ -515,6 +522,16 @@ void continue_sig_callback(void *ctx, uint32_t value) {
 }
 
 static
+void continue_sig_uint16_callback(void *ctx, uint16_t value) {
+    continue_sig_callback(ctx, value);
+}
+
+static
+void continue_sig_uint8_callback(void *ctx, uint8_t value) {
+    continue_sig_callback(ctx, value);
+}
+
+static
 void continue_init_config(struct msg_config *config,
                           struct msg_item *items)
 {
@@ -522,6 +539,8 @@ void continue_init_config(struct msg_config *config,
         items[0].key = "sig";
         items[0].callbacks = invalid_callbacks;
         items[0].callbacks.uint32 = continue_sig_callback;
+        items[0].callbacks.uint16 = continue_sig_uint16_callback;
+        items[0].callbacks.uint8 = continue_sig_uint8_callback;
 
         config->num_items = 1;
         config->items = items;
@@ -925,6 +944,7 @@ typedef int (*request_handler)(udirt_fd, udirt_fd, udi_errmsg *);
 
 static
 request_handler request_handlers[] = {
+    invalid_handler,
     continue_handler,
     read_handler,
     write_handler,
@@ -984,6 +1004,10 @@ int read_request_type(udirt_fd req_fd, udi_request_type_e *type, udi_errmsg *err
 
 static
 int write_error_response(udirt_fd resp_fd, udi_request_type_e req_type, udi_errmsg *errmsg) {
+    udi_errmsg local_errmsg;
+    local_errmsg.size = ERRMSG_SIZE;
+    local_errmsg.msg[ERRMSG_SIZE-1] = '\0';
+
     cbor_item_t *map = cbor_new_definite_map(1);
 
     struct cbor_pair msg_pair;
@@ -991,7 +1015,13 @@ int write_error_response(udirt_fd resp_fd, udi_request_type_e req_type, udi_errm
     msg_pair.value = cbor_move(cbor_build_string(errmsg->msg));
     cbor_map_add(map, msg_pair);
 
-    return write_response(resp_fd, UDI_RESP_ERROR, req_type, map, errmsg);
+    int result = write_response(resp_fd, UDI_RESP_ERROR, req_type, map, &local_errmsg);
+    if (result != RESULT_SUCCESS) {
+        udi_printf("failed to write error response: %s\n",
+                   local_errmsg.msg);
+    }
+
+    return result;
 }
 
 int handle_process_request(udirt_fd req_fd,
@@ -1011,7 +1041,11 @@ int handle_process_request(udirt_fd req_fd,
     }while (0);
 
     if (result != RESULT_SUCCESS) {
-        return write_error_response(resp_fd, *type, errmsg);
+        int error_result = write_error_response(resp_fd, *type, errmsg);
+        if (result != RESULT_ERROR && error_result == RESULT_ERROR) {
+            return RESULT_ERROR;
+        }
+
     }
 
     return result;
@@ -1072,7 +1106,8 @@ int perform_init_handshake(udirt_fd req_fd,
                      errmsg->size,
                      "received invalid request type(%s) as init request",
                      request_type_str(type));
-            result = write_error_response(resp_fd, type, errmsg);
+            write_error_response(resp_fd, type, errmsg);
+            result = RESULT_ERROR;
         } else {
             result = init_handler(tid, resp_fd, errmsg);
         }
@@ -1314,6 +1349,7 @@ thr_request_handler thr_request_handlers[] = {
     thr_invalid_handler,
     thr_invalid_handler,
     thr_invalid_handler,
+    thr_invalid_handler,
     read_register_handler,
     write_register_handler,
     thr_invalid_handler,
@@ -1346,7 +1382,10 @@ int handle_thread_request(udirt_fd req_fd,
     }while (0);
 
     if (result != RESULT_SUCCESS) {
-        return write_error_response(resp_fd, *type, errmsg);
+        int error_result = write_error_response(resp_fd, *type, errmsg);
+        if (result != RESULT_ERROR && error_result == RESULT_ERROR) {
+            return RESULT_ERROR;
+        }
     }
 
     return result;
@@ -1393,7 +1432,7 @@ int decode_breakpoint(thread *thr,
                       int *wait_for_request,
                       udi_errmsg *errmsg)
 {
-    int result;
+    int result = RESULT_SUCCESS;
 
     rewind_pc(context);
     if (thr != NULL) {

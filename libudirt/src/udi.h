@@ -75,6 +75,7 @@ typedef enum {
     UDI_X86_ST5,
     UDI_X86_ST6,
     UDI_X86_ST7,
+    UDI_X86_MAX,
 
     //UDI_X86_64 registers
     UDI_X86_64_MIN,
@@ -121,6 +122,7 @@ typedef enum {
     UDI_X86_64_XMM13,
     UDI_X86_64_XMM14,
     UDI_X86_64_XMM15,
+    UDI_X86_64_MAX
 } udi_register_e;
 
 /*

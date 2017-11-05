@@ -18,7 +18,6 @@ use super::protocol::Register;
 use super::protocol::request;
 use super::protocol::response;
 use super::protocol::Architecture;
-use super::protocol::read_response;
 use super::UserData;
 
 use serde::de::DeserializeOwned;
@@ -70,7 +69,7 @@ impl Thread {
     pub fn suspend(&mut self) -> Result<()> {
         let msg = request::ThreadSuspend::new();
 
-        self.send_request::<response::ThreadSuspend, _>(&msg)?;
+        self.send_request_no_data(&msg)?;
 
         Ok(())
     }
@@ -93,7 +92,7 @@ impl Thread {
     pub fn write_register(&mut self, reg: Register, value: u64) -> Result<()> {
         let msg = request::WriteRegister::new(reg as u32, value);
 
-        self.send_request::<response::WriteRegister, _>(&msg)?;
+        self.send_request_no_data(&msg)?;
 
         Ok(())
     }
@@ -111,7 +110,23 @@ impl Thread {
 
         ctx.request_file.write_all(&request::serialize(msg)?)?;
 
-        read_response::<T, File>(&mut ctx.response_file)
+        response::read::<T, File>(&mut ctx.response_file)
+    }
+
+    fn send_request_no_data<S: request::RequestType + Serialize>(&mut self, msg: &S)
+            -> Result<()> {
+        let ctx = match self.file_context.as_mut() {
+            Some(ctx) => ctx,
+            None => {
+                let msg = format!("Thread {:?} terminated, cannot performed requested operation",
+                                  self.tid);
+                return Err(ErrorKind::Request(msg).into());
+            }
+        };
+
+        ctx.request_file.write_all(&request::serialize(msg)?)?;
+
+        response::read_no_data::<File>(&mut ctx.response_file)
     }
 }
 

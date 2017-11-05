@@ -22,7 +22,7 @@ use super::Process;
 use super::ProcessFileContext;
 use super::Thread;
 use super::ThreadState;
-use super::protocol::{request,response,read_response};
+use super::protocol::{request,response};
 use super::UserData;
 
 impl Process {
@@ -74,7 +74,7 @@ impl Process {
             // No response is expected when continuing a terminating process
             ctx.request_file.write_all(&request::serialize(&msg)?)?;
         } else {
-            self.send_request::<response::Continue, _>(&msg)?;
+            self.send_request_no_data(&msg)?;
         }
 
         self.running = true;
@@ -85,7 +85,7 @@ impl Process {
     pub fn create_breakpoint(&mut self, addr: u64) -> Result<()> {
         let msg = request::CreateBreakpoint::new(addr);
 
-        self.send_request::<response::CreateBreakpoint, _>(&msg)?;
+        self.send_request_no_data(&msg)?;
 
         Ok(())
     }
@@ -93,7 +93,7 @@ impl Process {
     pub fn install_breakpoint(&mut self, addr: u64) -> Result<()> {
         let msg = request::InstallBreakpoint::new(addr);
 
-        self.send_request::<response::InstallBreakpoint, _>(&msg)?;
+        self.send_request_no_data(&msg)?;
 
         Ok(())
     }
@@ -101,7 +101,7 @@ impl Process {
     pub fn remove_breakpoint(&mut self, addr: u64) -> Result<()> {
         let msg = request::RemoveBreakpoint::new(addr);
 
-        self.send_request::<response::RemoveBreakpoint, _>(&msg)?;
+        self.send_request_no_data(&msg)?;
 
         Ok(())
     }
@@ -109,7 +109,7 @@ impl Process {
     pub fn delete_breakpoint(&mut self, addr: u64) -> Result<()> {
         let msg = request::DeleteBreakpoint::new(addr);
 
-        self.send_request::<response::DeleteBreakpoint, _>(&msg)?;
+        self.send_request_no_data(&msg)?;
 
         Ok(())
     }
@@ -138,7 +138,7 @@ impl Process {
     pub fn write_mem(&mut self, data: &[u8], addr: u64) -> Result<()> {
         let msg = request::WriteMemory::new(addr, data);
 
-        self.send_request::<response::WriteMemory, _>(&msg)?;
+        self.send_request_no_data(&msg)?;
 
         Ok(())
     }
@@ -157,7 +157,16 @@ impl Process {
 
         ctx.request_file.write_all(&request::serialize(msg)?)?;
 
-        read_response::<T, File>(&mut ctx.response_file)
+        response::read::<T, File>(&mut ctx.response_file)
+    }
+
+    fn send_request_no_data<S: request::RequestType + Serialize>(&mut self, msg: &S)
+            -> Result<()> {
+        let ctx = self.get_file_context()?;
+
+        ctx.request_file.write_all(&request::serialize(msg)?)?;
+
+        response::read_no_data::<File>(&mut ctx.response_file)
     }
 
     pub(crate) fn get_file_context(&mut self) -> Result<&mut ProcessFileContext> {

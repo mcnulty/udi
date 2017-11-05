@@ -423,6 +423,7 @@ const char *register_str(udi_register_e reg) {
         CASE_TO_STR(UDI_X86_ST5);
         CASE_TO_STR(UDI_X86_ST6);
         CASE_TO_STR(UDI_X86_ST7);
+        CASE_TO_STR(UDI_X86_MAX);
         CASE_TO_STR(UDI_X86_64_MIN);
         CASE_TO_STR(UDI_X86_64_R8);
         CASE_TO_STR(UDI_X86_64_R9);
@@ -467,6 +468,7 @@ const char *register_str(udi_register_e reg) {
         CASE_TO_STR(UDI_X86_64_XMM13);
         CASE_TO_STR(UDI_X86_64_XMM14);
         CASE_TO_STR(UDI_X86_64_XMM15);
+        CASE_TO_STR(UDI_X86_64_MAX);
         default: return "UNSPECIFIED";
     }
 }
