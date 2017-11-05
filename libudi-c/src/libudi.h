@@ -416,7 +416,7 @@ udi_error delete_breakpoint(udi_process *proc, uint64_t addr);
  */
 udi_error mem_access(udi_process *proc,
                      int write,
-                     void *value, 
+                     void *value,
                      uint32_t size,
                      uint64_t addr);
 
