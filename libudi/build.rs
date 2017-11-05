@@ -34,5 +34,5 @@ fn main() {
                             .expect("Failed to download native file tests zip");
     }
 
-    native_file_tests::setup(&out_path, &local_zip);
+    native_file_tests::setup(&manifest_path, &out_path, &local_zip);
 }

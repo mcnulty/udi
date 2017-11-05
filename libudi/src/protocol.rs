@@ -394,12 +394,12 @@ pub mod request {
     pub struct SingleStep {
         #[serde(skip_serializing)]
         typ: Type,
-        value: u8
+        value: bool
     }
 
     impl SingleStep {
         pub fn new(setting: bool) -> SingleStep {
-            let value = setting as u8;
+            let value = setting;
 
             SingleStep{ typ: Type::SingleStep, value }
         }
@@ -456,7 +456,7 @@ pub mod response {
 
     #[derive(Deserialize,Serialize,Debug)]
     pub struct SingleStep {
-        pub value: u8
+        pub value: bool
     }
 
     #[derive(Deserialize,Serialize,Debug)]
@@ -481,13 +481,14 @@ pub mod response {
         let mut de = super::Deserializer::new(reader);
 
         let response_type: Type = super::Deserialize::deserialize(&mut de)?;
-        <super::request::Type as super::Deserialize>::deserialize(&mut de)?;
+        let request_type: super::request::Type = super::Deserialize::deserialize(&mut de)?;
 
         match response_type {
             Type::Valid => Ok(super::Deserialize::deserialize(&mut de)?),
             Type::Error => {
                 let err: ResponseError = super::Deserialize::deserialize(&mut de)?;
-                Err(super::ErrorKind::Request(err.msg).into())
+                let msg = format!("type {:?}: {}", request_type, err.msg);
+                Err(super::ErrorKind::Request(msg).into())
             }
         }
     }
@@ -496,13 +497,14 @@ pub mod response {
         let mut de = super::Deserializer::new(reader);
 
         let response_type: Type = super::Deserialize::deserialize(&mut de)?;
-        <super::request::Type as super::Deserialize>::deserialize(&mut de)?;
+        let request_type: super::request::Type = super::Deserialize::deserialize(&mut de)?;
 
         match response_type {
             Type::Valid => Ok(()),
             Type::Error => {
                 let err: ResponseError = super::Deserialize::deserialize(&mut de)?;
-                Err(super::ErrorKind::Request(err.msg).into())
+                let msg = format!("type {:?}: {}", request_type, err.msg);
+                Err(super::ErrorKind::Request(msg).into())
             }
         }
     }
@@ -511,7 +513,7 @@ pub mod response {
 pub mod event {
 
     enum_number!(Type {
-        Invalid = 0,
+        Unknown = 0,
         Error = 1,
         Signal = 2,
         Breakpoint = 3,
@@ -620,8 +622,8 @@ fn deserialize_event_data<R: io::Read>(de: &mut Deserializer<R>, event_type: &ev
     -> ::std::result::Result<event::EventData, EventReadError> {
 
     let event_data = match *event_type {
-        event::Type::Invalid => {
-            let msg = "Invalid event reported".to_owned();
+        event::Type::Unknown => {
+            let msg = "Unknown event reported".to_owned();
             return Err(EventReadError::Udi(ErrorKind::Library(msg).into()));
         },
         event::Type::Error => {

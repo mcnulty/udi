@@ -77,7 +77,7 @@ impl Thread {
     pub fn resume(&mut self) -> Result<()> {
         let msg = request::ThreadResume::new();
 
-        self.send_request::<request::ThreadResume, _>(&msg)?;
+        self.send_request_no_data(&msg)?;
         Ok(())
     }
 

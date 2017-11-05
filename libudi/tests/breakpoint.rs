@@ -23,8 +23,8 @@ fn breakpoint() {
     }
 }
 
-fn breakpoint_test() -> Result<(), UdiError> {
-    
+fn breakpoint_test() -> Result<()> {
+
     let addr = native_file_tests::SIMPLE_FUNCTION1;
 
     let config = udi::ProcessConfig{ root_dir: None };

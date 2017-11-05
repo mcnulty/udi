@@ -54,7 +54,7 @@ fn singlestep_test() -> Result<()> {
 
     // single step through the whole test function
     let mut next_pc: u64 = 0;
-    while next_pc != 0 && next_pc < addr + len && current_pc < addr + len {
+    while next_pc < addr + len && current_pc < addr + len {
         proc_ref.lock()?.continue_process()?;
 
         utils::wait_for_event(&proc_ref, &thr_ref, &udi::EventData::SingleStep);

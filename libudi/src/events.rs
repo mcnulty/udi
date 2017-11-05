@@ -66,7 +66,8 @@ pub fn wait_for_events(procs: &Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>> {
         poll.poll(&mut events, None)?;
 
         for event in &events {
-            if event.readiness().is_readable() {
+            let ready = event.readiness();
+            if ready.is_readable() || sys::is_event_source_failed(ready) {
                 let event_token = event.token();
                 if let Some(ctx) = event_procs.get_mut(&event_token) {
                     let event = handle_read_event(&mut *ctx)?;
@@ -160,6 +161,12 @@ mod sys {
     use super::mio::{Ready, Poll, PollOpt, Token};
     use super::mio::unix::EventedFd;
     use super::mio::event::Evented;
+    use super::mio::unix::UnixReady;
+
+    pub fn is_event_source_failed(ready: Ready) -> bool {
+        let unix_ready = UnixReady::from(ready);
+        unix_ready.is_hup() || unix_ready.is_error()
+    }
 
     pub struct EventSource {
         fd: RawFd

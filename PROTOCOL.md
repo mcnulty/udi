@@ -15,21 +15,22 @@ The possible values for the request type are in the table below:
 
 | Request Type        | Value |
 | ------------        | ----- |
-| continue            | 0     |
-| read memory         | 1     |
-| write memory        | 2     |
-| read register       | 3     |
-| write register      | 4     |
-| state               | 5     |
-| init                | 6     |
-| create breakpoint   | 7     |
-| install breakpoint  | 8     |
-| remove breakpoint   | 9     |
-| delete breakpoint   | 10    |
-| thread suspend      | 11    |
-| thread resume       | 12    |
-| next instruction    | 13    |
-| single step         | 14    |
+| invalid             | 0     |
+| continue            | 1     |
+| read memory         | 2     |
+| write memory        | 3     |
+| read register       | 4     |
+| write register      | 5     |
+| state               | 6     |
+| init                | 7     |
+| create breakpoint   | 8     |
+| install breakpoint  | 9     |
+| remove breakpoint   | 10    |
+| delete breakpoint   | 11    |
+| thread suspend      | 12    |
+| thread resume       | 13    |
+| next instruction    | 14    |
+| single step         | 15    |
 
 ## Responses
 
@@ -66,16 +67,17 @@ The following is a list of event types and corresponding values:
 
 | Event Type      | Value |
 | ----------      | ----- |
-| error           | 0 |
-| signal          | 1 |
-| breakpoint      | 2 |
-| thread create   | 3 |
-| thread death    | 4 |
-| process exit    | 5 |
-| process fork    | 6 |
-| process exec    | 7 |
-| single step     | 8 |
-| process cleanup | 9 |
+| unknown         | 0 |
+| error           | 1 |
+| signal          | 2 |
+| breakpoint      | 3 |
+| thread create   | 4 |
+| thread death    | 5 |
+| process exit    | 6 |
+| process fork    | 7 |
+| process exec    | 8 |
+| single step     | 9 |
+| process cleanup | 10 |
 
 The third data item is a map and its pairs are defined by the event type.
 

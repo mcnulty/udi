@@ -8,3 +8,4 @@ target/
 libudirt/build
 libudirt/.udirt.config
 native-file-tests.zip
+native-file-tests

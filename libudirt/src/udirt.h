@@ -92,6 +92,7 @@ thread *get_next_thread(thread *thr);
 thread *get_current_thread();
 int is_thread_dead(thread *thr);
 udi_thread_state_e get_thread_state(thread *thr);
+void set_thread_state(thread *thr, udi_thread_state_e state);
 uint64_t get_thread_id(thread *thr);
 int is_thread_context_valid(thread *thr);
 void *get_thread_context(thread *thr);

@@ -290,6 +290,10 @@ udi_thread_state_e get_thread_state(thread *thr) {
     return thr->ts;
 }
 
+void set_thread_state(thread *thr, udi_thread_state_e state) {
+    thr->ts = state;
+}
+
 uint64_t get_thread_id(thread *thr) {
     return thr->id;
 }

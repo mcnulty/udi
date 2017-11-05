@@ -18,7 +18,7 @@
 // constants
 enum { BREAKPOINT_HASH_SIZE = 256 };
 
-const uint64_t UDI_SINGLE_THREAD_ID = 0xC0FEEABC;
+const uint64_t UDI_SINGLE_THREAD_ID = 0xC0FFEEABC;
 
 const char * const UDI_ROOT_DIR_ENV = "UDI_ROOT_DIR";
 const char * const REQUEST_FILE_NAME = "request";

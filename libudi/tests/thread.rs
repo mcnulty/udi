@@ -33,12 +33,12 @@ fn thread_test() -> Result<()> {
 
     let config = udi::ProcessConfig{ root_dir: None };
     let envp = Vec::new();
-    let argv = vec![ binary_path.to_owned(), NUM_THREADS.to_string() ];
+    let argv = vec![ NUM_THREADS.to_string() ];
 
     let proc_ref = udi::create_process(binary_path,
-                                      &argv,
-                                      &envp,
-                                      &config)?;
+                                       &argv,
+                                       &envp,
+                                       &config)?;
 
     let thr_ref;
     {
@@ -72,7 +72,7 @@ fn thread_test() -> Result<()> {
             EventData::ThreadCreate{ .. } => {
                 threads_created += 1;
             },
-            _ => panic!(format!("Unexpected event {:?}", e))
+            _ => panic!(format!("Unexpected event {:?}", e.data))
         }
 
         start_received && threads_created == NUM_THREADS
@@ -121,6 +121,8 @@ fn thread_test() -> Result<()> {
 
         thread_deaths_received == NUM_THREADS
     });
+
+    proc_ref.lock()?.continue_process()?;
 
     utils::wait_for_exit(&proc_ref, &thr_ref, 0);
 

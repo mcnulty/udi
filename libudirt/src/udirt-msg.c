@@ -563,6 +563,24 @@ int continue_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg) {
         return result;
     }
 
+    // check that at least one thread is in a running state
+    thread *iter = get_thread_list();
+    int can_continue = 0;
+    while (iter != NULL) {
+        if (get_thread_state(iter) == UDI_TS_RUNNING) {
+            can_continue = 1;
+            break;
+        }
+
+        iter = get_next_thread(iter);
+    }
+
+    if (!can_continue) {
+        snprintf(errmsg->msg, errmsg->size,
+                 "cannot continue process, all threads are suspended");
+        return RESULT_FAILURE;
+    }
+
     // special handling for a continue from a breakpoint
     if ( continue_bp != NULL ) {
         int install_result = install_breakpoint(continue_bp, errmsg);
@@ -606,12 +624,16 @@ static
 void read_addr_callback(void *ctx, uint64_t value) {
     read_mem_req *data = (read_mem_req *)req_state(ctx)->data;
     data->addr = value;
+
+    complete_item(ctx);
 }
 
 static
 void read_len_callback(void *ctx, uint32_t value) {
     read_mem_req *data = (read_mem_req *)req_state(ctx)->data;
     data->len = value;
+
+    complete_item(ctx);
 }
 
 static
@@ -695,12 +717,16 @@ void write_data_callback(void *ctx, cbor_data data, size_t len) {
         memcpy((void *)state->data, data, len);
         state->len = len;
     }
+
+    complete_item(ctx);
 }
 
 static
 void write_addr_callback(void *ctx, uint64_t value) {
     write_mem_req *state = (write_mem_req *)req_state(ctx)->data;
     state->addr = value;
+
+    complete_item(ctx);
 }
 
 static
@@ -797,6 +823,23 @@ static
 void breakpoint_addr_callback(void *ctx, uint64_t value) {
     brkpt_req *req = (brkpt_req *)req_state(ctx)->data;
     req->addr = value;
+
+    complete_item(ctx);
+}
+
+static
+void breakpoint_addr_uint32_callback(void *ctx, uint32_t value) {
+    breakpoint_addr_callback(ctx, value);
+}
+
+static
+void breakpoint_addr_uint16_callback(void *ctx, uint16_t value) {
+    breakpoint_addr_callback(ctx, value);
+}
+
+static
+void breakpoint_addr_uint8_callback(void *ctx, uint8_t value) {
+    breakpoint_addr_callback(ctx, value);
 }
 
 static
@@ -807,6 +850,9 @@ void breakpoint_init_config(struct msg_config *config,
         items[0].key = "addr";
         items[0].callbacks = invalid_callbacks;
         items[0].callbacks.uint64 = breakpoint_addr_callback;
+        items[0].callbacks.uint32 = breakpoint_addr_uint32_callback;
+        items[0].callbacks.uint16 = breakpoint_addr_uint16_callback;
+        items[0].callbacks.uint8 = breakpoint_addr_uint8_callback;
 
         config->num_items = 1;
         config->items = items;
@@ -897,7 +943,7 @@ int breakpoint_install_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *er
         return RESULT_FAILURE;
     }
 
-    return RESULT_SUCCESS;
+    return write_response_no_data(resp_fd, UDI_RESP_VALID, UDI_REQ_INSTALL_BREAKPOINT, errmsg);
 }
 
 static
@@ -914,7 +960,7 @@ int breakpoint_remove_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *err
         return RESULT_FAILURE;
     }
 
-    return RESULT_SUCCESS;
+    return write_response_no_data(resp_fd, UDI_RESP_VALID, UDI_REQ_REMOVE_BREAKPOINT, errmsg);
 }
 
 static
@@ -931,7 +977,7 @@ int breakpoint_delete_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *err
         return RESULT_FAILURE;
     }
 
-    return RESULT_SUCCESS;
+    return write_response_no_data(resp_fd, UDI_RESP_VALID, UDI_REQ_REMOVE_BREAKPOINT, errmsg);
 }
 
 static
@@ -944,22 +990,22 @@ typedef int (*request_handler)(udirt_fd, udirt_fd, udi_errmsg *);
 
 static
 request_handler request_handlers[] = {
-    invalid_handler,
-    continue_handler,
-    read_handler,
-    write_handler,
-    invalid_handler,
-    invalid_handler,
-    state_handler,
-    invalid_handler,
-    breakpoint_create_handler,
-    breakpoint_install_handler,
-    breakpoint_remove_handler,
-    breakpoint_delete_handler,
-    invalid_handler,
-    invalid_handler,
-    invalid_handler,
-    invalid_handler
+    invalid_handler, // invalid
+    continue_handler, // continue
+    read_handler, // read memory
+    write_handler, // write memory
+    invalid_handler, // read register
+    invalid_handler, // write register
+    state_handler, // state
+    invalid_handler, // init
+    breakpoint_create_handler, // create breakpoint
+    breakpoint_install_handler, // install breakpoint
+    breakpoint_remove_handler, // remove breakpoint
+    breakpoint_delete_handler, // delete breakpoint
+    invalid_handler, // thread suspend
+    invalid_handler, // thread resume
+    invalid_handler, // next instruction
+    invalid_handler // single step
 };
 
 static
@@ -1120,6 +1166,13 @@ static
 void read_reg_callback(void *ctx, uint16_t value) {
     read_reg_req *req = (read_reg_req *)req_state(ctx)->data;
     req->reg = value;
+
+    complete_item(ctx);
+}
+
+static
+void read_reg_uint8_callback(void *ctx, uint8_t value) {
+    read_reg_callback(ctx, value);
 }
 
 static
@@ -1130,6 +1183,7 @@ void read_reg_init_config(struct msg_config *config,
         items[0].key = "reg";
         items[0].callbacks = invalid_callbacks;
         items[0].callbacks.uint16 = read_reg_callback;
+        items[0].callbacks.uint8 = read_reg_uint8_callback;
 
         config->items = items;
         config->num_items = 1;
@@ -1181,12 +1235,36 @@ static
 void write_reg_callback(void *ctx, uint16_t value) {
     write_reg_req *req = (write_reg_req *)req_state(ctx)->data;
     req->reg = value;
+
+    complete_item(ctx);
+}
+
+static
+void write_reg_uint8_callback(void *ctx, uint8_t value) {
+    write_reg_callback(ctx, value);
 }
 
 static
 void write_reg_value_callback(void *ctx, uint64_t value) {
     write_reg_req *req = (write_reg_req *)req_state(ctx)->data;
     req->value = value;
+
+    complete_item(ctx);
+}
+
+static
+void write_reg_value_uint32_callback(void *ctx, uint32_t value) {
+    write_reg_value_callback(ctx, value);
+}
+
+static
+void write_reg_value_uint16_callback(void *ctx, uint16_t value) {
+    write_reg_value_callback(ctx, value);
+}
+
+static
+void write_reg_value_uint8_callback(void *ctx, uint8_t value) {
+    write_reg_value_callback(ctx, value);
 }
 
 static
@@ -1197,10 +1275,14 @@ void write_reg_init_config(struct msg_config *config,
         items[0].key = "reg";
         items[0].callbacks = invalid_callbacks;
         items[0].callbacks.uint16 = write_reg_callback;
+        items[0].callbacks.uint8 = write_reg_uint8_callback;
 
         items[1].key = "value";
         items[1].callbacks = invalid_callbacks;
         items[1].callbacks.uint64 = write_reg_value_callback;
+        items[1].callbacks.uint32 = write_reg_value_uint32_callback;
+        items[1].callbacks.uint16 = write_reg_value_uint16_callback;
+        items[1].callbacks.uint8 = write_reg_value_uint8_callback;
 
         config->items = items;
         config->num_items = 2;
@@ -1290,9 +1372,27 @@ int next_instr_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errms
 }
 
 static
+int thr_suspend_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg) {
+    udi_printf("suspended thread 0x%"PRIx64"\n", get_thread_id(thr));
+    set_thread_state(thr, UDI_TS_SUSPENDED);
+
+    return write_response_no_data(resp_fd, UDI_RESP_VALID, UDI_REQ_THREAD_SUSPEND, errmsg);
+}
+
+static
+int thr_resume_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg) {
+    udi_printf("resume thread 0x%"PRIx64"\n", get_thread_id(thr));
+    set_thread_state(thr, UDI_TS_RUNNING);
+
+    return write_response_no_data(resp_fd, UDI_RESP_VALID, UDI_REQ_THREAD_RESUME, errmsg);
+}
+
+static
 void single_step_callback(void *ctx, bool value) {
     single_step_req *req = (single_step_req *)req_state(ctx)->data;
     req->setting = value;
+
+    complete_item(ctx);
 }
 
 static
@@ -1327,6 +1427,17 @@ int single_step_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errm
     bool prev_setting = is_single_step(thr);
     set_single_step(thr, req.setting);
 
+    // Need to remove an existing single step breakpoint if it already exists
+    breakpoint *single_step_bp = get_single_step_breakpoint(thr);
+    if ( !req.setting && single_step_bp != NULL) {
+        if ( delete_breakpoint(single_step_bp, errmsg) ) {
+            udi_printf("failed to delete existing single step breakpoint: %s\n",
+                       errmsg->msg);
+            return RESULT_FAILURE;
+        }
+        set_single_step_breakpoint(thr, NULL);
+    }
+
     cbor_item_t *map = cbor_new_definite_map(1);
 
     struct cbor_pair value_pair;
@@ -1346,22 +1457,22 @@ typedef int (*thr_request_handler)(udirt_fd, udirt_fd, thread *, udi_errmsg *err
 
 static
 thr_request_handler thr_request_handlers[] = {
-    thr_invalid_handler,
-    thr_invalid_handler,
-    thr_invalid_handler,
-    thr_invalid_handler,
-    read_register_handler,
-    write_register_handler,
-    thr_invalid_handler,
-    thr_invalid_handler,
-    thr_invalid_handler,
-    thr_invalid_handler,
-    thr_invalid_handler,
-    thr_invalid_handler,
-    thr_state_handler,
-    thr_state_handler,
-    next_instr_handler,
-    single_step_handler
+    thr_invalid_handler, // invalid
+    thr_invalid_handler, // continue
+    thr_invalid_handler, // read memory
+    thr_invalid_handler, // write memory
+    read_register_handler, // read register
+    write_register_handler, // write register
+    thr_state_handler, // state
+    thr_invalid_handler, // init
+    thr_invalid_handler, // create breakpoint
+    thr_invalid_handler, // install breakpoint
+    thr_invalid_handler, // remove breakpoint
+    thr_invalid_handler, // delete breakpoint
+    thr_suspend_handler, // thread suspend
+    thr_resume_handler, // thread resume
+    next_instr_handler, // next instruction
+    single_step_handler // single step
 };
 
 int handle_thread_request(udirt_fd req_fd,
