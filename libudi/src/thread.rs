@@ -53,9 +53,15 @@ impl Thread {
     pub fn set_single_step(&mut self, setting: bool) -> Result<()> {
         let msg = request::SingleStep::new(setting);
 
-        self.send_request::<response::SingleStep, _>(&msg)?;
+        let resp: response::SingleStep = self.send_request(&msg)?;
+
+        self.single_step = setting;
 
         Ok(())
+    }
+
+    pub fn get_single_step(&self) -> bool {
+        self.single_step
     }
 
     pub fn get_next_instruction(&mut self) -> Result<u64> {

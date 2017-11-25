@@ -1,18 +1,3 @@
-[root]
-name = "udi"
-version = "0.1.0"
-dependencies = [
- "derive-error-chain 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "downcast-rs 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "error-chain 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "mio 0.6.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "native_file_tests 0.1.0",
- "serde 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_cbor 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_derive 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "users 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
 [[package]]
 name = "backtrace"
 version = "0.3.3"
@@ -263,6 +248,21 @@ version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "unicode-xid 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "udi"
+version = "0.1.0"
+dependencies = [
+ "derive-error-chain 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "downcast-rs 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "error-chain 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mio 0.6.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "native_file_tests 0.1.0",
+ "serde 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_cbor 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_derive 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "users 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

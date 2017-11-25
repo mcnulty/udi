@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015, UDI Contributors
+ * Copyright (c) 2011-2017, UDI Contributors
  * All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -153,23 +153,24 @@ typedef struct udi_proc_config_struct {
 
 /*
  * Create UDI-controlled process
- * 
+ *
  * @param executable   the full path to the executable
  * @param argv         the arguments
  * @param envp         the environment, if NULL, the newly created process will
  *                     inherit the environment for this process
  * @param config       the configuration for creating the process
- * @param error        on error, populated with error data
+ * @param process      populated on success
  *
  * @return a handle to the created process or NULL on error
  *
+ * @return the result of the operation
  * @see execve on a UNIX system
  */
-udi_process *create_process(const char *executable,
-                            char * const argv[],
-                            char * const envp[],
-                            const udi_proc_config *config,
-                            udi_error *error);
+udi_error create_process(const char *executable,
+                         char * const argv[],
+                         char * const envp[],
+                         const udi_proc_config *config,
+                         udi_process * const* process);
 
 /**
  * Tells the library that resources allocated for the process can be released
@@ -203,67 +204,76 @@ udi_error refresh_state(udi_process *proc);
  *
  * @param proc          the process handle
  * @param user_data     the user data to associated with the process handle
+ *
+ * @return the result of the operation
  */
-void set_user_data(udi_process *proc, void *user_data);
+udi_error set_user_data(udi_process *proc, void *user_data);
 
 /**
  * Gets the user data stored with the internal process structure
  *
  * @param proc          the process handle
+ * @param output     the output user data
  *
- * @return the user data
+ * @return the result of the operation
  */
-void *get_user_data(udi_process *proc);
+udi_error *get_user_data(udi_process *proc, void **output);
 
 /**
  * Gets the process identifier for the specified process
  *
  * @param proc          the process handle
+ * @param output        the output pid
  *
- * @return the pid for the process
+ * @return the result of the operation
  */
-int get_proc_pid(udi_process *proc);
+udi_error get_proc_pid(udi_process *proc, uint32_t *output);
 
 /**
  * Gets the architecture for the specified process
  *
  * @param proc          the process handle
+ * @param output        the output architecture
  *
- * @return the architecture for the process
+ * @return the result of the operation
  */
-udi_arch_e get_proc_architecture(udi_process *proc);
+udi_error get_proc_architecture(udi_process *proc, udi_arch_e *output);
 
 /**
  * Gets whether the specified process is multithread capable
  *
  * @param proc          the process handle
+ * @param output        the output. non-zero if the process is multithread capable
  *
- * @return non-zero if the process is multithread capable
+ * @return the result of the operation
  */
-int get_multithread_capable(udi_process *proc);
+udi_error get_multithread_capable(udi_process *proc, int *output);
 
 /*
  * Gets the initial thread in the specified process
  *
  * @param proc the process handle
+ * @param output the output
  *
- * @return the thread handle or NULL if no initial thread could be found
+ * @return the result of the operation
  */
-udi_thread *get_initial_thread(udi_process *proc);
+udi_error get_initial_thread(udi_process *proc, udi_thread **output);
 
 /**
  * @param proc the process handle
+ * @param output non-zero if the process has been continued, but events haven't been received yet
  *
- * @return non-zero if the process has been continued, but events haven't been received yet
+ * @return the result of the operation
  */
-int is_running(udi_process *proc);
+udi_error is_running(udi_process *proc, int *output);
 
 /**
  * @param proc the process handle
+ * @param output non-zero if the process is terminated and can no longer be interacted with
  *
- * @return non-zero if the process is terminated and can no longer be interacted with
+ * @return the result of the operation
  */
-int is_terminated(udi_process *proc);
+udi_error is_terminated(udi_process *proc, int *output);
 
 // Thread properties //
 
@@ -272,53 +282,52 @@ int is_terminated(udi_process *proc);
  *
  * @param thread       the thread handle
  * @param user_data    the user data
+ *
+ * @return the result of the operation
  */
-void set_thread_user_data(udi_thread *thr, void *user_data);
+udi_error set_thread_user_data(udi_thread *thr, void *user_data);
 
 /**
  * Gets the user data stored with the internal thread structure
  *
  * @param thread       the thread handle
+ * @param output       the output user data
  *
- * @return the user data
+ * @return the result of the operation
  */
-void *get_thread_user_data(udi_thread *thr);
+udi_error *get_thread_user_data(udi_thread *thr, void **output);
 
 /**
  * Gets the thread id for the specified thread
  *
  * @param thr the thread handle
+ * @param output the output tid
  *
- * @return the thread id for the thread
+ * @return the result of the operation
  */
-uint64_t get_tid(udi_thread *thr);
-
-/**
- * Gets the process for the specified thread
- *
- * @param thr the thread handle
- *
- * @return the process handle
- */
-udi_process *get_process(udi_thread *thr);
+udi_error get_tid(udi_thread *thr, uint64_t *output);
 
 /**
  * Gets the state for the specified thread
  *
- * @param thr thre thread handle
+ * @param thr the thread handle
+ * @param output the state
  *
- * @return the thread handle
+ * @return the result of the operation
  */
-udi_thread_state_e get_state(udi_thread *thr);
+udi_error get_state(udi_thread *thr, udi_thread_state_e *output);
 
 /**
  * Gets the next thread
  * 
  * @param thr the thread
+ * @param output the next thread or NULL if no more threads
  *
- * @return the thread or NULL if no more threads
+ * @return the result of the operation
  */
-udi_thread *get_next_thread(udi_thread *thr);
+udi_error get_next_thread(udi_process *proc,
+                          udi_thread *thr,
+                          udi_thread **output);
 
 // Thread control //
 
@@ -348,10 +357,11 @@ udi_error set_single_step(udi_thread *thr, int enable);
 
 /**
  * @param thr the thread
+ * @param output the output setting
  *
- * @return the current single step setting for the specified thread
+ * @return the result of the operation
  */
-int get_single_step(udi_thread *thr);
+udi_error get_single_step(udi_thread *thr, int *output);
 
 // Breakpoint interface //
 
@@ -416,7 +426,7 @@ udi_error delete_breakpoint(udi_process *proc, uint64_t addr);
  */
 udi_error mem_access(udi_process *proc,
                      int write,
-                     void *value,
+                     uint8_t *value,
                      uint32_t size,
                      uint64_t addr);
 
@@ -523,10 +533,11 @@ typedef struct udi_event_thread_create_struct {
  *
  * @param procs         the processes
  * @param num_procs     the number of processes
+ * @param events        the output events or NULL if no events
  *
- * @return a list of events that occurred in the processes, NULL on failure
+ * @return the result of the operation
  */
-udi_event *wait_for_events(udi_process *procs[], int num_procs);
+udi_error wait_for_events(udi_process *procs[], int num_procs, udi_event **evnts);
 
 /**
  * @return a string representation of the specified event type
