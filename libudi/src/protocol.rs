@@ -24,6 +24,7 @@ pub const UDI_PROTOCOL_VERSION_1: u32 = 1;
 // From serde documentation
 macro_rules! enum_number {
     ($name:ident { $($variant:ident = $value:expr, )* }) => {
+        #[repr(C)]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum $name {
             $($variant = $value,)*
@@ -571,7 +572,7 @@ pub mod event {
         Breakpoint{ addr: u64 },
         ThreadCreate{ tid: u64 },
         ThreadDeath,
-        ProcessExit{ code: u32 },
+        ProcessExit{ code: i32 },
         ProcessFork{ pid: u32 },
         ProcessExec{ path: String, argv: Vec<String>, envp: Vec<String> },
         SingleStep,

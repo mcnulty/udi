@@ -43,7 +43,7 @@ typedef struct udi_error_struct {
  * architecture of debuggee
  */
 typedef enum {
-    UDI_ARCH_X86,
+    UDI_ARCH_X86 = 0,
     UDI_ARCH_X86_64
 } udi_arch_e;
 
@@ -414,35 +414,52 @@ udi_error delete_breakpoint(udi_process *proc, uint64_t addr);
 // Memory access interface //
 
 /**
- * Access memory in a process
+ * Read memory from a process
  *
  * @param proc          the process handle
- * @param write         if non-zero, write to specified address
- * @param value         pointer to the value to read/write
- * @param size          the size of the data block pointed to by value
- * @param addr          the location in memory to read/write
- *
- * @return the result of the operation
+ * @param dst           the destination for the read memory
+ * @param size          the size of the data block to read
+ * @param addr          the address of the data block to read
  */
-udi_error mem_access(udi_process *proc,
-                     int write,
-                     uint8_t *value,
-                     uint32_t size,
-                     uint64_t addr);
-
-// Register access interface //
+udi_error read_mem(udi_process *proc,
+                   uint8_t *dst,
+                   uint32_t size,
+                   uint64_t addr);
 
 /**
- * Access a register in the specified thread
+ * Write memory from a process
+ *
+ * @param proc          the process handle
+ * @param src           the source of the data to write
+ * @param size          the size of the data block to write
+ * @param addr          the address of the data block to write
+ */
+udi_error write_mem(udi_process *proc,
+                    const uint8_t *src,
+                    uint32_t size,
+                    uint64_t addr);
+
+/**
+ * Reads a register for the specified thread
  *
  * @param thr the thread
- * @param write 1 if the value should written into the register, 0 read
- * @param reg the register to access
- * @param value the destination of the register value on read; the value to write otherwise
+ * @param reg the register
+ * @param value the output value
  *
  * @return the result of the operation
  */
-udi_error register_access(udi_thread *thr, int write, udi_register_e reg, uint64_t *value);
+udi_error read_register(udi_thread *thr, udi_register_e reg, uint64_t *value);
+
+/**
+ * Write a register for the specified thread
+ *
+ * @param thr the thread
+ * @param reg the register
+ * @param value the output value
+ *
+ * @return the result of the operation
+ */
+udi_error write_register(udi_thread *thr, udi_register_e reg, uint64_t value);
 
 /**
  * Gets the PC for the specified thread
@@ -471,7 +488,8 @@ udi_error get_next_instruction(udi_thread *thr, uint64_t *instr);
  */
 typedef enum
 {
-    UDI_EVENT_ERROR = 0,
+    UDI_EVENT_UNKNOWN = 0,
+    UDI_EVENT_ERROR,
     UDI_EVENT_SIGNAL,
     UDI_EVENT_BREAKPOINT,
     UDI_EVENT_THREAD_CREATE,
@@ -480,9 +498,7 @@ typedef enum
     UDI_EVENT_PROCESS_FORK,
     UDI_EVENT_PROCESS_EXEC,
     UDI_EVENT_SINGLE_STEP,
-    UDI_EVENT_PROCESS_CLEANUP,
-    UDI_EVENT_MAX,
-    UDI_EVENT_UNKNOWN
+    UDI_EVENT_PROCESS_CLEANUP
 } udi_event_type_e;
 
 /**
@@ -501,7 +517,7 @@ typedef struct udi_event_struct {
  * typeof(udi_event.event_data) == udi_event_error
  */
 typedef struct udi_event_error_struct {
-    char *errstr;
+    const char *errstr;
 } udi_event_error;
 
 /**
@@ -509,8 +525,18 @@ typedef struct udi_event_error_struct {
  * typeof(udi_event.event_data) == udi_event_process_exit
  */
 typedef struct udi_event_process_exit_struct {
-    int exit_code;
+    int32_t exit_code;
 } udi_event_process_exit;
+
+/**
+ * When udi_event.event_type == UDI_EVENT_PROCESS_FORK
+ * typeof(udi_event.event_data) == udi_event_process_fork
+ */
+typedef struct udi_event_process_fork_struct {
+    uint32_t pid;
+} udi_event_process_fork;
+
+typedef struct udi_event_
 
 /**
  * When udi_event.event_type == UDI_EVENT_BREAKPOINT
@@ -529,6 +555,15 @@ typedef struct udi_event_thread_create_struct {
 } udi_event_thread_create;
 
 /**
+ * When udi_event.event_type == UDI_EVENT_SIGNAL
+ * typeof(udi_event.event_data) == udi_event_signal
+ */
+typedef struct udi_event_signal_struct {
+    uint64_t addr;
+    uint32_t sig
+} udi_event_signal;
+
+/**
  * Wait for events to occur in the specified processes.
  *
  * @param procs         the processes
@@ -537,7 +572,7 @@ typedef struct udi_event_thread_create_struct {
  *
  * @return the result of the operation
  */
-udi_error wait_for_events(udi_process *procs[], int num_procs, udi_event **evnts);
+udi_error wait_for_events(udi_process *procs[], int num_procs, udi_event **events);
 
 /**
  * @return a string representation of the specified event type

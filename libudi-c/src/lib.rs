@@ -14,16 +14,27 @@ extern crate udi;
 
 use std::sync::{Mutex,Arc};
 use std::ffi::{CStr, CString};
+use std::mem::{transmute, size_of};
 
-use udi::{Process, ProcessConfig, Thread, Error, ErrorKind, Result, UserData};
+use udi::{Process,
+          ProcessConfig,
+          Thread,
+          Error,
+          ErrorKind,
+          Result,
+          UserData,
+          EventData,
+          Register};
 
 pub struct udi_thread_struct {
     handle: Arc<Mutex<Thread>>,
+    tid: u64,
     next: *const udi_thread_struct
 }
 
 pub struct udi_process_struct {
     handle: Arc<Mutex<Process>>,
+    pid: u32,
     thr: *const udi_thread_struct
 }
 
@@ -47,11 +58,11 @@ impl UnsafeFrom<Result<()>> for udi_error_struct {
             Ok(_) => udi_error_struct{ code: UDI_ERROR_NONE, msg: std::ptr::null() },
             Err(e) => match *e.kind() {
                 ErrorKind::Request(ref msg) => {
-                    udi_error_struct{ code: UDI_ERROR_REQUEST, msg: to_error_msg(&msg) }
+                    udi_error_struct{ code: UDI_ERROR_REQUEST, msg: to_c_string(&msg) }
                 },
                 _ => {
                     let msg = format!("{}", e);
-                    udi_error_struct{ code: UDI_ERROR_LIBRARY, msg: to_error_msg(&msg) }
+                    udi_error_struct{ code: UDI_ERROR_LIBRARY, msg: to_c_string(&msg) }
                 }
             }
         }
@@ -62,11 +73,11 @@ impl UnsafeFrom<Error> for udi_error_struct {
     unsafe fn from(e: Error) -> udi_error_struct {
         match *e.kind() {
             ErrorKind::Request(ref msg) => {
-                udi_error_struct{ code: UDI_ERROR_REQUEST, msg: to_error_msg(&msg) }
+                udi_error_struct{ code: UDI_ERROR_REQUEST, msg: to_c_string(&msg) }
             },
             _ => {
                 let msg = format!("{}", e);
-                udi_error_struct{ code: UDI_ERROR_LIBRARY, msg: to_error_msg(&msg) }
+                udi_error_struct{ code: UDI_ERROR_LIBRARY, msg: to_c_string(&msg) }
             }
         }
     }
@@ -74,17 +85,17 @@ impl UnsafeFrom<Error> for udi_error_struct {
 
 impl<'a> UnsafeFrom<std::sync::PoisonError<std::sync::MutexGuard<'a, Process>>> for udi_error_struct {
     unsafe fn from(_: std::sync::PoisonError<std::sync::MutexGuard<'a, Process>>) -> udi_error_struct {
-        udi_error_struct{ code: UDI_ERROR_LIBRARY, msg: to_error_msg("lock failed") }
+        udi_error_struct{ code: UDI_ERROR_LIBRARY, msg: to_c_string("lock failed") }
     }
 }
 
 impl<'a> UnsafeFrom<std::sync::PoisonError<std::sync::MutexGuard<'a, Thread>>> for udi_error_struct {
     unsafe fn from(_: std::sync::PoisonError<std::sync::MutexGuard<'a, Thread>>) -> udi_error_struct {
-        udi_error_struct{ code: UDI_ERROR_LIBRARY, msg: to_error_msg("lock failed") }
+        udi_error_struct{ code: UDI_ERROR_LIBRARY, msg: to_c_string("lock failed") }
     }
 }
 
-unsafe fn to_error_msg(msg: &str) -> *const libc::c_schar {
+unsafe fn to_c_string(msg: &str) -> *const libc::c_schar {
     let cstr = match CString::new(msg) {
         Ok(val) => val,
         Err(_) => return std::ptr::null(),
@@ -120,7 +131,7 @@ pub unsafe extern "C" fn create_process(executable: *const libc::c_schar,
         *process = std::ptr::null();
         return udi_error_struct{
             code: UDI_ERROR_REQUEST,
-            msg: to_error_msg("Executable cannot be null")
+            msg: to_c_string("Executable cannot be null")
         };
     }
 
@@ -128,7 +139,7 @@ pub unsafe extern "C" fn create_process(executable: *const libc::c_schar,
         *process = std::ptr::null();
         return udi_error_struct{
             code: UDI_ERROR_REQUEST,
-            msg: to_error_msg("Argument array cannot be null")
+            msg: to_c_string("Argument array cannot be null")
         };
     }
 
@@ -136,7 +147,7 @@ pub unsafe extern "C" fn create_process(executable: *const libc::c_schar,
         *process = std::ptr::null();
         return udi_error_struct{
             code: UDI_ERROR_REQUEST,
-            msg: to_error_msg("Process config cannot be null")
+            msg: to_c_string("Process config cannot be null")
         };
     }
 
@@ -146,7 +157,7 @@ pub unsafe extern "C" fn create_process(executable: *const libc::c_schar,
             *process = std::ptr::null();
             return udi_error_struct{
                 code: UDI_ERROR_REQUEST,
-                msg: to_error_msg("Executable is not a valid UTF-8 string")
+                msg: to_c_string("Executable is not a valid UTF-8 string")
             };
         }
     };
@@ -186,7 +197,7 @@ pub unsafe extern "C" fn create_process(executable: *const libc::c_schar,
                 *process = std::ptr::null();
                 return udi_error_struct{
                     code: UDI_ERROR_REQUEST,
-                    msg: to_error_msg("Process config root dir is not a valid UTF-8 string")
+                    msg: to_c_string("Process config root dir is not a valid UTF-8 string")
                 };
             }
         };
@@ -200,16 +211,24 @@ pub unsafe extern "C" fn create_process(executable: *const libc::c_schar,
         Ok(p) => {
 
             let thread_ptr;
+            let pid;
             {
                 let udi_process = try_err!(p.lock());
-                thread_ptr = Box::new(udi_thread_struct {
+                let pid = udi_process.get_pid();
+
+                let thr_handle = udi_process.get_initial_thread();
+                let tid = try_err!(thr_handle.lock()).get_tid();
+
+                thread_ptr = Box::new(udi_thread_struct{
                     handle: udi_process.get_initial_thread(),
+                    tid,
                     next: std::ptr::null()
                 });
             }
 
             let process_ptr = Box::new(udi_process_struct{
                 handle: p,
+                pid,
                 thr: Box::into_raw(thread_ptr)
             });
             *process = Box::into_raw(process_ptr);
@@ -238,7 +257,7 @@ unsafe fn to_vec(arr: *const *const libc::c_schar)
 
         let elem_str = match CStr::from_ptr(elem).to_str() {
             Ok(val) => val.to_owned(),
-            Err(_) => return Err(to_error_msg("Invalid string in specified array")),
+            Err(_) => return Err(to_c_string("Invalid string in specified array")),
         };
 
         output.push(elem_str);
@@ -551,23 +570,369 @@ fn delete_breakpoint(process_wrapper: *const udi_process_struct, addr: libc::uin
 
 #[no_mangle]
 pub unsafe extern "C"
-fn mem_access(process_wrapper: *const udi_process_struct,
-              write: libc::c_int,
-              value: *const libc::uint8_t,
-              size: libc::uint32_t,
-              addr: libc::uint64_t)
+fn read_mem(process_wrapper: *const udi_process_struct,
+            dst: *mut libc::uint8_t,
+            size: libc::uint32_t,
+            addr: libc::uint64_t)
     -> udi_error_struct
 {
     let mut process = try_err!((*process_wrapper).handle.lock());
 
-    if write != 0 {
-        let src = std::slice::from_raw_parts(value, size as usize);
-        UnsafeFrom::from(process.write_mem(src, addr))
+    let data = try_err!(process.read_mem(size, addr));
+    let src = &data[0] as *const libc::uint8_t;
+    libc::memcpy(dst as *mut libc::c_void, src as *const libc::c_void, size as usize);
+    UnsafeFrom::from(Ok(()))
+}
+
+#[no_mangle]
+pub unsafe extern "C"
+fn write_mem(process_wrapper: *const udi_process_struct,
+             src: *const libc::uint8_t,
+             size: libc::uint32_t,
+             addr: libc::uint64_t)
+    -> udi_error_struct
+{
+    let mut process = try_err!((*process_wrapper).handle.lock());
+
+    let src = std::slice::from_raw_parts(src, size as usize);
+    UnsafeFrom::from(process.write_mem(src, addr))
+}
+
+#[no_mangle]
+pub unsafe extern "C"
+fn read_register(thr_wrapper: *const udi_thread_struct,
+                 reg: libc::uint32_t,
+                 value: *mut libc::uint64_t)
+    -> udi_error_struct
+{
+    let mut thread = try_err!((*thr_wrapper).handle.lock());
+
+    let register = transmute::<libc::uint32_t, Register>(reg);
+
+    *value = try_err!(thread.read_register(register));
+
+    UnsafeFrom::from(Ok(()))
+}
+
+#[no_mangle]
+pub unsafe extern "C"
+fn write_register(thr_wrapper: *const udi_thread_struct,
+                  reg: libc::uint32_t,
+                  value: libc::uint64_t)
+    -> udi_error_struct
+{
+    let mut thread = try_err!((*thr_wrapper).handle.lock());
+
+    let register = transmute::<libc::uint32_t, Register>(reg);
+
+    UnsafeFrom::from(thread.write_register(register, value))
+}
+
+#[no_mangle]
+pub unsafe extern "C"
+fn get_pc(thr_wrapper: *const udi_thread_struct,
+          pc: *mut libc::uint64_t)
+    -> udi_error_struct
+{
+    let mut thread = try_err!((*thr_wrapper).handle.lock());
+
+    *pc = try_err!(thread.get_pc());
+
+    UnsafeFrom::from(Ok(()))
+}
+
+#[no_mangle]
+pub unsafe extern "C"
+fn get_next_instruction(thr_wrapper: *const udi_thread_struct,
+                        instr: *mut libc::uint64_t)
+    -> udi_error_struct
+{
+    let mut thread = try_err!((*thr_wrapper).handle.lock());
+
+    *instr = try_err!(thread.get_next_instruction());
+
+    UnsafeFrom::from(Ok(()))
+}
+
+#[repr(C)]
+pub struct udi_event_struct {
+    event_type: libc::uint32_t,
+    process: *const udi_process_struct,
+    thr: *const udi_thread_struct,
+    event_data: *const libc::c_void,
+    next_event: *const udi_event_struct
+}
+
+#[repr(C)]
+pub struct udi_event_error_struct {
+    errstr: *const libc::c_schar
+}
+
+#[repr(C)]
+pub struct udi_event_process_exit_struct {
+    exit_code: libc::int32_t
+}
+
+#[repr(C)]
+pub struct udi_event_breakpoint_struct {
+    breakpoint_addr: libc::uint64_t
+}
+
+#[repr(C)]
+pub struct udi_event_thread_create_struct {
+    new_thr: *const udi_thread_struct
+}
+
+#[repr(C)]
+pub struct udi_event_signal_struct {
+    addr: libc::uint64_t,
+    sig: libc::uint32_t
+}
+
+#[repr(C)]
+pub struct udi_event_process_fork_struct {
+    pid: libc::uint32_t
+}
+
+#[repr(C)]
+pub struct udi_event_process_exec_struct {
+    path: *const libc::c_schar,
+    argv: *const *const libc::c_schar,
+    envp: *const *const libc::c_schar
+}
+
+#[no_mangle]
+pub unsafe extern "C"
+fn wait_for_events(procs: *const *const udi_process_struct,
+                   num_procs: libc::c_int,
+                   output: *mut *const udi_event_struct)
+    -> udi_error_struct
+{
+    let procs_slice: &[* const udi_process_struct] = std::slice::from_raw_parts(procs, num_procs as usize);
+
+    let procs_vec = procs_slice.iter()
+        .map(|p| (**p).handle.clone())
+        .collect::<Vec< Arc<Mutex<Process>>>>();
+
+    let events = try_err!(udi::wait_for_events(&procs_vec));
+
+    let mut output_events;
+    if events.len() > 0 {
+        let mut event_structs: Vec<udi_event_struct> = vec![];
+        for event in events {
+            let proc_handle = try_err!(find_proc_handle(&procs_slice, &event.process));
+            let thr_handle = try_err!(find_thr_handle(proc_handle, &event.thread));
+
+            event_structs.push(try_err!(to_event_struct(proc_handle, thr_handle, &event.data)));
+        }
+
+        // TODO convert to linked list
+        output_events = std::ptr::null();
     } else {
-        let data = try_err!(process.read_mem(size, addr));
-        let dst = value as *mut libc::uint8_t;
-        let src = &data[0] as *const libc::uint8_t;
-        libc::memcpy(dst as *mut libc::c_void, src as *const libc::c_void, size as usize);
-        UnsafeFrom::from(Ok(()))
+        output_events = std::ptr::null();
+    }
+
+    *output = output_events;
+
+    UnsafeFrom::from(Ok(()))
+}
+
+unsafe fn find_proc_handle(procs_slice: &[*const udi_process_struct],
+                           process: &Arc<Mutex<Process>>)
+    -> Result<* const udi_process_struct> {
+
+    let pid = process.lock()?.get_pid();
+
+    let opt = procs_slice.iter().find(|&&p| (*p).pid == pid).map(|p| *p);
+
+    opt.ok_or_else(|| ErrorKind::Library("Could not locate event process handle".to_owned()).into())
+}
+
+unsafe fn find_thr_handle(proc_handle: *const udi_process_struct,
+                          thread: &Arc<Mutex<Thread>>)
+    -> Result<* const udi_thread_struct> {
+
+    let tid = thread.lock()?.get_tid();
+
+    find_thr_handle_for_tid(proc_handle, tid)
+}
+unsafe fn find_thr_handle_for_tid(proc_handle: *const udi_process_struct, tid: u64)
+    -> Result<* const udi_thread_struct> {
+
+    let mut thr_iter = (*proc_handle).thr;
+
+    let mut opt = None;
+    while thr_iter != std::ptr::null() {
+        if (*thr_iter).tid == tid {
+            opt = Some(thr_iter);
+            break;
+        }
+
+        thr_iter = (*thr_iter).next;
+    }
+
+    opt.ok_or_else(|| ErrorKind::Library("Could not locate event thread handle".to_owned()).into())
+}
+
+unsafe
+fn to_event_struct(proc_handle: *const udi_process_struct,
+                   thr_handle: *const udi_thread_struct,
+                   event_data: &EventData)
+    -> Result<udi_event_struct>
+{
+    let (event_type, event_data) = match *event_data {
+        EventData::Error{ msg } => {
+            let error_struct = libc::malloc(size_of::<udi_event_error_struct>())
+                as *mut udi_event_error_struct;
+
+            (*error_struct).errstr = to_c_string(&msg);
+
+            (UDI_EVENT_ERROR, error_struct as *const libc::c_void)
+        },
+        EventData::Signal{ addr, sig } => {
+            let signal_struct = libc::malloc(size_of::<udi_event_signal_struct>())
+                as *mut udi_event_signal_struct;
+
+            (*signal_struct).addr = addr;
+            (*signal_struct).sig = sig;
+
+            (UDI_EVENT_SIGNAL, std::ptr::null())
+        },
+        EventData::Breakpoint{ addr } => {
+            let brkpt_struct = libc::malloc(size_of::<udi_event_breakpoint_struct>())
+                as *mut udi_event_breakpoint_struct;
+
+            (*brkpt_struct).breakpoint_addr = addr;
+
+            (UDI_EVENT_BREAKPOINT, brkpt_struct as *const libc::c_void)
+        },
+        EventData::ThreadCreate{ tid } => {
+            let thr_struct = libc::malloc(size_of::<udi_event_thread_create_struct>())
+                as *mut udi_event_thread_create_struct;
+
+            (*thr_struct).new_thr = find_thr_handle_for_tid(proc_handle, tid)?;
+
+            (UDI_EVENT_THREAD_CREATE, thr_struct as *const libc::c_void)
+        },
+        ThreadDeath => (UDI_EVENT_THREAD_DEATH, std::ptr::null()),
+        EventData::ProcessExit{ code } => {
+            let exit_struct = libc::malloc(size_of::<udi_event_process_exit_struct>())
+                as *mut udi_event_process_exit_struct;
+
+            (*exit_struct).exit_code = code;
+
+            (UDI_EVENT_PROCESS_EXIT, exit_struct as *const libc::c_void)
+        },
+        EventData::ProcessFork{ pid } => {
+            let fork_struct = libc::malloc(size_of::<udi_event_process_fork_struct>())
+                as *mut udi_event_process_fork_struct;
+
+            (*fork_struct).pid = pid;
+
+            (UDI_EVENT_PROCESS_FORK, fork_struct as *const libc::c_void)
+        },
+        EventData::ProcessExec{ path, argv, envp } => {
+            let exec_struct = libc::malloc(size_of::<udi_event_process_exec_struct>())
+                as *mut udi_event_process_exec_struct;
+
+            (*exec_struct).path = to_c_string(&path);
+            (*exec_struct).argv = to_null_term_array(&argv);
+            (*exec_struct).envp = to_null_term_array(&envp);
+
+            (UDI_EVENT_PROCESS_EXEC, exec_struct as *const libc::c_void)
+        },
+        SingleStep => (UDI_EVENT_SINGLE_STEP, std::ptr::null()),
+        ProcessCleanup => (UDI_EVENT_PROCESS_CLEANUP, std::ptr::null())
+    };
+
+    Ok(udi_event_struct{
+        process: proc_handle,
+        thr: thr_handle,
+        event_type,
+        event_data,
+        next_event: std::ptr::null()
+    })
+}
+
+unsafe
+fn to_null_term_array(input: &Vec<String>) -> *const *const libc::c_schar {
+
+    // TODO implement
+
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C"
+fn free_event_list(event_list: *const udi_event_struct)
+{
+    let mut iter = event_list;
+
+    while iter != std::ptr::null() {
+        let next_event = (*iter).next_event;
+
+        // TODO free event data
+
+        libc::free(iter as *mut libc::c_void);
+
+        iter = next_event;
+    }
+}
+
+macro_rules! cstr {
+  ($s:expr) => (
+    concat!($s, "\0") as *const str as *const [libc::c_char] as *const libc::c_char
+  );
+}
+
+const UDI_EVENT_UNKNOWN: libc::uint32_t = 0;
+const UNKNOWN_STR: *const libc::c_char = cstr!("UNKNOWN");
+
+const UDI_EVENT_ERROR: libc::uint32_t = 1;
+const ERROR_STR: *const libc::c_char = cstr!("ERROR");
+
+const SIGNAL: *const libc::c_char = cstr!("SIGNAL");
+const UDI_EVENT_SIGNAL: libc::uint32_t = 2;
+
+const BREAKPOINT: *const libc::c_char = cstr!("BREAKPOINT");
+const UDI_EVENT_BREAKPOINT: libc::uint32_t = 3;
+
+const THREAD_CREATE: *const libc::c_char = cstr!("THREAD_CREATE");
+const UDI_EVENT_THREAD_CREATE: libc::uint32_t = 4;
+
+const THREAD_DEATH: *const libc::c_char = cstr!("THREAD_DEATH");
+const UDI_EVENT_THREAD_DEATH: libc::uint32_t = 5;
+
+const PROCESS_EXIT: *const libc::c_char = cstr!("PROCESS_EXIT");
+const UDI_EVENT_PROCESS_EXIT: libc::uint32_t = 6;
+
+const PROCESS_FORK: *const libc::c_char = cstr!("PROCESS_FORK");
+const UDI_EVENT_PROCESS_FORK: libc::uint32_t = 7;
+
+const PROCESS_EXEC: *const libc::c_char = cstr!("PROCESS_EXEC");
+const UDI_EVENT_PROCESS_EXEC: libc::uint32_t = 8;
+
+const SINGLE_STEP: *const libc::c_char = cstr!("SINGLE_STEP");
+const UDI_EVENT_SINGLE_STEP: libc::uint32_t = 9;
+
+const PROCESS_CLEANUP: *const libc::c_char = cstr!("PROCESS_CLEANUP");
+const UDI_EVENT_PROCESS_CLEANUP: libc::uint32_t = 10;
+
+#[no_mangle]
+pub unsafe extern "C"
+fn get_event_type_str(input: libc::uint32_t) -> *const libc::c_schar
+{
+    match input {
+        UDI_EVENT_ERROR => ERROR_STR,
+        UDI_EVENT_SIGNAL => SIGNAL,
+        UDI_EVENT_BREAKPOINT => BREAKPOINT,
+        UDI_EVENT_THREAD_CREATE => THREAD_CREATE,
+        UDI_EVENT_THREAD_DEATH => THREAD_DEATH,
+        UDI_EVENT_PROCESS_EXIT => PROCESS_EXIT,
+        UDI_EVENT_PROCESS_FORK => PROCESS_FORK,
+        UDI_EVENT_PROCESS_EXEC => PROCESS_EXEC,
+        UDI_EVENT_SINGLE_STEP => SINGLE_STEP,
+        UDI_EVENT_PROCESS_CLEANUP => PROCESS_CLEANUP,
+        _ => UNKNOWN_STR
     }
 }

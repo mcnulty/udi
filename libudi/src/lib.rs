@@ -35,6 +35,7 @@ pub use events::Event;
 pub use events::wait_for_events;
 pub use protocol::event::EventData;
 pub use protocol::Architecture;
+pub use protocol::Register;
 
 pub trait UserData: Downcast + std::fmt::Debug {}
 impl_downcast!(UserData);
