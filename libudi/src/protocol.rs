@@ -550,7 +550,7 @@ pub mod event {
 
     #[derive(Deserialize,Serialize,Debug)]
     pub struct ProcessExit {
-        pub code: u32
+        pub code: i32
     }
 
     #[derive(Deserialize,Serialize,Debug)]

@@ -28,6 +28,7 @@ typedef struct udi_thread_struct udi_thread;
 typedef enum {
     UDI_ERROR_LIBRARY, /// there was an internal library error
     UDI_ERROR_REQUEST, /// the request was invalid
+    UDI_ERROR_NOMEM, /// memory could not be allocated
     UDI_ERROR_NONE
 } udi_error_e;
 
@@ -36,6 +37,11 @@ typedef enum {
  */
 typedef struct udi_error_struct {
     udi_error_e code;
+
+    /**
+     * A heap allocated error string. It will be null if memory could not be allocated for the error message.
+     * Callers of UDI functions are expected to free this value.
+     */
     const char *const msg;
 } udi_error;
 
@@ -536,7 +542,15 @@ typedef struct udi_event_process_fork_struct {
     uint32_t pid;
 } udi_event_process_fork;
 
-typedef struct udi_event_
+/**
+ * When udi_event.event_type == UDI_EVENT_PROCESS_EXEC
+ * typeof(udi_event.event_data) == udi_event_process_exec
+ */
+typedef struct udi_event_process_exec_struct {}
+    const char *path;
+    const char * const *argv;
+    const char * const *envp;
+} udi_event_process_exec;
 
 /**
  * When udi_event.event_type == UDI_EVENT_BREAKPOINT

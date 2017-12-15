@@ -21,7 +21,6 @@ use udi::{Process,
           Thread,
           Error,
           ErrorKind,
-          Result,
           UserData,
           EventData,
           Register};
@@ -40,7 +39,8 @@ pub struct udi_process_struct {
 
 const UDI_ERROR_LIBRARY: libc::c_int = 0;
 const UDI_ERROR_REQUEST: libc::c_int = 1;
-const UDI_ERROR_NONE: libc::c_int = 2;
+const UDI_ERROR_NOMEM: libc::c_int = 2;
+const UDI_ERROR_NONE: libc::c_int = 3;
 
 #[repr(C)]
 pub struct udi_error_struct {
@@ -52,13 +52,13 @@ trait UnsafeFrom<T> {
     unsafe fn from(_: T) -> Self;
 }
 
-impl UnsafeFrom<Result<()>> for udi_error_struct {
-    unsafe fn from(result: Result<()>) -> udi_error_struct {
+impl UnsafeFrom<udi::Result<()>> for udi_error_struct {
+    unsafe fn from(result: udi::Result<()>) -> udi_error_struct {
         match result {
             Ok(_) => udi_error_struct{ code: UDI_ERROR_NONE, msg: std::ptr::null() },
             Err(e) => match *e.kind() {
                 ErrorKind::Request(ref msg) => {
-                    udi_error_struct{ code: UDI_ERROR_REQUEST, msg: to_c_string(&msg) }
+                    udi_error_struct{ code: UDI_ERROR_REQUEST, msg: to_c_string(msg) }
                 },
                 _ => {
                     let msg = format!("{}", e);
@@ -83,6 +83,12 @@ impl UnsafeFrom<Error> for udi_error_struct {
     }
 }
 
+impl UnsafeFrom<udi_error_struct> for udi_error_struct {
+    unsafe fn from(e: udi_error_struct) -> udi_error_struct {
+        e
+    }
+}
+
 impl<'a> UnsafeFrom<std::sync::PoisonError<std::sync::MutexGuard<'a, Process>>> for udi_error_struct {
     unsafe fn from(_: std::sync::PoisonError<std::sync::MutexGuard<'a, Process>>) -> udi_error_struct {
         udi_error_struct{ code: UDI_ERROR_LIBRARY, msg: to_c_string("lock failed") }
@@ -103,7 +109,10 @@ unsafe fn to_c_string(msg: &str) -> *const libc::c_schar {
 
     let len = cstr.to_bytes_with_nul().len();
     let output = libc::malloc(len);
-    libc::memcpy(output, cstr.as_ptr() as *const libc::c_void, len);
+    if output != std::ptr::null_mut() {
+        libc::memcpy(output, cstr.as_ptr() as *const libc::c_void, len);
+    }
+
     output as *const libc::c_schar
 }
 
@@ -111,6 +120,13 @@ macro_rules! try_err {
     ($e:expr) => (match $e {
         Ok(val) => val,
         Err(err) => return UnsafeFrom::from(err)
+    });
+}
+
+macro_rules! try_unsafe {
+    ($e:expr) => (match $e {
+        Ok(val) => val,
+        Err(err) => return Err(UnsafeFrom::from(err))
     });
 }
 
@@ -214,7 +230,7 @@ pub unsafe extern "C" fn create_process(executable: *const libc::c_schar,
             let pid;
             {
                 let udi_process = try_err!(p.lock());
-                let pid = udi_process.get_pid();
+                pid = udi_process.get_pid();
 
                 let thr_handle = udi_process.get_initial_thread();
                 let tid = try_err!(thr_handle.lock()).get_tid();
@@ -718,16 +734,50 @@ fn wait_for_events(procs: *const *const udi_process_struct,
 
     let mut output_events;
     if events.len() > 0 {
-        let mut event_structs: Vec<udi_event_struct> = vec![];
-        for event in events {
-            let proc_handle = try_err!(find_proc_handle(&procs_slice, &event.process));
-            let thr_handle = try_err!(find_thr_handle(proc_handle, &event.thread));
 
-            event_structs.push(try_err!(to_event_struct(proc_handle, thr_handle, &event.data)));
-        }
-
-        // TODO convert to linked list
         output_events = std::ptr::null();
+        let mut last_event = std::ptr::null() as *const udi_event_struct;
+        for event in events {
+            let proc_handle = match find_proc_handle(&procs_slice, &event.process) {
+                Ok(p) => p,
+                Err(e) => {
+                    free_event_list(output_events);
+                    return e;
+                }
+            };
+
+            let thr_handle = match find_thr_handle(proc_handle, &event.thread) {
+                Ok(t) => t,
+                Err(e) => {
+                    free_event_list(output_events);
+                    return e;
+                }
+            };
+
+            let event_struct = match to_event_struct(proc_handle, thr_handle, &event.data) {
+                Ok(val) => val,
+                Err(e) => {
+                    free_event_list(output_events);
+                    return e;
+                }
+            };
+
+            let current_event = match try_malloc(size_of::<udi_event_struct>()) {
+                Ok(p) => p as *mut udi_event_struct,
+                Err(e) => {
+                    free_event_list(output_events);
+                    return e;
+                }
+            };
+
+            *current_event = event_struct;
+            (*current_event).next_event = last_event;
+            last_event = current_event;
+
+            if output_events == std::ptr::null() {
+                output_events = current_event;
+            }
+        }
     } else {
         output_events = std::ptr::null();
     }
@@ -739,25 +789,28 @@ fn wait_for_events(procs: *const *const udi_process_struct,
 
 unsafe fn find_proc_handle(procs_slice: &[*const udi_process_struct],
                            process: &Arc<Mutex<Process>>)
-    -> Result<* const udi_process_struct> {
+    -> Result<* const udi_process_struct, udi_error_struct> {
 
-    let pid = process.lock()?.get_pid();
+    let pid = try_unsafe!(process.lock()).get_pid();
 
     let opt = procs_slice.iter().find(|&&p| (*p).pid == pid).map(|p| *p);
 
-    opt.ok_or_else(|| ErrorKind::Library("Could not locate event process handle".to_owned()).into())
+    opt.ok_or_else(|| udi_error_struct{
+        code: UDI_ERROR_LIBRARY,
+        msg: to_c_string("Could not locate event process handle")
+    })
 }
 
 unsafe fn find_thr_handle(proc_handle: *const udi_process_struct,
                           thread: &Arc<Mutex<Thread>>)
-    -> Result<* const udi_thread_struct> {
+    -> Result<* const udi_thread_struct, udi_error_struct> {
 
-    let tid = thread.lock()?.get_tid();
+    let tid = try_unsafe!(thread.lock()).get_tid();
 
     find_thr_handle_for_tid(proc_handle, tid)
 }
 unsafe fn find_thr_handle_for_tid(proc_handle: *const udi_process_struct, tid: u64)
-    -> Result<* const udi_thread_struct> {
+    -> Result<* const udi_thread_struct, udi_error_struct> {
 
     let mut thr_iter = (*proc_handle).thr;
 
@@ -771,18 +824,21 @@ unsafe fn find_thr_handle_for_tid(proc_handle: *const udi_process_struct, tid: u
         thr_iter = (*thr_iter).next;
     }
 
-    opt.ok_or_else(|| ErrorKind::Library("Could not locate event thread handle".to_owned()).into())
+    opt.ok_or_else(|| udi_error_struct{
+        code: UDI_ERROR_LIBRARY,
+        msg: to_c_string("Could not locate event thread handle")
+    })
 }
 
 unsafe
 fn to_event_struct(proc_handle: *const udi_process_struct,
                    thr_handle: *const udi_thread_struct,
                    event_data: &EventData)
-    -> Result<udi_event_struct>
+    -> Result<udi_event_struct, udi_error_struct>
 {
-    let (event_type, event_data) = match *event_data {
-        EventData::Error{ msg } => {
-            let error_struct = libc::malloc(size_of::<udi_event_error_struct>())
+    let (event_type, raw_event_data) = match *event_data {
+        EventData::Error{ ref msg } => {
+            let error_struct = try_malloc(size_of::<udi_event_error_struct>())?
                 as *mut udi_event_error_struct;
 
             (*error_struct).errstr = to_c_string(&msg);
@@ -790,7 +846,7 @@ fn to_event_struct(proc_handle: *const udi_process_struct,
             (UDI_EVENT_ERROR, error_struct as *const libc::c_void)
         },
         EventData::Signal{ addr, sig } => {
-            let signal_struct = libc::malloc(size_of::<udi_event_signal_struct>())
+            let signal_struct = try_malloc(size_of::<udi_event_signal_struct>())?
                 as *mut udi_event_signal_struct;
 
             (*signal_struct).addr = addr;
@@ -799,7 +855,7 @@ fn to_event_struct(proc_handle: *const udi_process_struct,
             (UDI_EVENT_SIGNAL, std::ptr::null())
         },
         EventData::Breakpoint{ addr } => {
-            let brkpt_struct = libc::malloc(size_of::<udi_event_breakpoint_struct>())
+            let brkpt_struct = try_malloc(size_of::<udi_event_breakpoint_struct>())?
                 as *mut udi_event_breakpoint_struct;
 
             (*brkpt_struct).breakpoint_addr = addr;
@@ -807,16 +863,16 @@ fn to_event_struct(proc_handle: *const udi_process_struct,
             (UDI_EVENT_BREAKPOINT, brkpt_struct as *const libc::c_void)
         },
         EventData::ThreadCreate{ tid } => {
-            let thr_struct = libc::malloc(size_of::<udi_event_thread_create_struct>())
+            let thr_struct = try_malloc(size_of::<udi_event_thread_create_struct>())?
                 as *mut udi_event_thread_create_struct;
 
             (*thr_struct).new_thr = find_thr_handle_for_tid(proc_handle, tid)?;
 
             (UDI_EVENT_THREAD_CREATE, thr_struct as *const libc::c_void)
         },
-        ThreadDeath => (UDI_EVENT_THREAD_DEATH, std::ptr::null()),
+        EventData::ThreadDeath => (UDI_EVENT_THREAD_DEATH, std::ptr::null()),
         EventData::ProcessExit{ code } => {
-            let exit_struct = libc::malloc(size_of::<udi_event_process_exit_struct>())
+            let exit_struct = try_malloc(size_of::<udi_event_process_exit_struct>())?
                 as *mut udi_event_process_exit_struct;
 
             (*exit_struct).exit_code = code;
@@ -824,42 +880,100 @@ fn to_event_struct(proc_handle: *const udi_process_struct,
             (UDI_EVENT_PROCESS_EXIT, exit_struct as *const libc::c_void)
         },
         EventData::ProcessFork{ pid } => {
-            let fork_struct = libc::malloc(size_of::<udi_event_process_fork_struct>())
+            let fork_struct = try_malloc(size_of::<udi_event_process_fork_struct>())?
                 as *mut udi_event_process_fork_struct;
 
             (*fork_struct).pid = pid;
 
             (UDI_EVENT_PROCESS_FORK, fork_struct as *const libc::c_void)
         },
-        EventData::ProcessExec{ path, argv, envp } => {
-            let exec_struct = libc::malloc(size_of::<udi_event_process_exec_struct>())
+        EventData::ProcessExec{ ref path, ref argv, ref envp } => {
+            let exec_struct = try_malloc(size_of::<udi_event_process_exec_struct>())?
                 as *mut udi_event_process_exec_struct;
 
+            (*exec_struct).argv = match to_null_term_array(&argv) {
+                Ok(argv) => argv,
+                Err(e) => {
+                    libc::free(exec_struct as *mut libc::c_void);
+                    return Err(e);
+                }
+            };
+
+            (*exec_struct).envp = match to_null_term_array(&envp) {
+                Ok(envp) => envp,
+                Err(e) => {
+                    free_null_term_array((*exec_struct).argv);
+                    libc::free(exec_struct as *mut libc::c_void);
+                    return Err(e);
+                }
+            };
+
             (*exec_struct).path = to_c_string(&path);
-            (*exec_struct).argv = to_null_term_array(&argv);
-            (*exec_struct).envp = to_null_term_array(&envp);
+
+            if (*exec_struct).path == std::ptr::null() {
+                free_null_term_array((*exec_struct).argv);
+                free_null_term_array((*exec_struct).envp);
+                libc::free(exec_struct as *mut libc::c_void);
+                return Err(udi_error_struct{
+                    code: UDI_ERROR_NOMEM,
+                    msg: std::ptr::null()
+                });
+            }
 
             (UDI_EVENT_PROCESS_EXEC, exec_struct as *const libc::c_void)
         },
-        SingleStep => (UDI_EVENT_SINGLE_STEP, std::ptr::null()),
-        ProcessCleanup => (UDI_EVENT_PROCESS_CLEANUP, std::ptr::null())
+        EventData::SingleStep => (UDI_EVENT_SINGLE_STEP, std::ptr::null()),
+        EventData::ProcessCleanup => (UDI_EVENT_PROCESS_CLEANUP, std::ptr::null())
     };
 
     Ok(udi_event_struct{
         process: proc_handle,
         thr: thr_handle,
         event_type,
-        event_data,
+        event_data: raw_event_data,
         next_event: std::ptr::null()
     })
 }
 
 unsafe
-fn to_null_term_array(input: &Vec<String>) -> *const *const libc::c_schar {
+fn to_null_term_array(input: &Vec<String>)
+    -> Result<*const *const libc::c_schar, udi_error_struct> {
 
-    // TODO implement
+    let len = input.len();
+    let output = try_malloc(size_of::<*const libc::c_schar>() * (len + 1))?
+        as *mut *const libc::c_schar;
+    *(output.offset(len as isize)) = std::ptr::null();
 
-    std::ptr::null()
+    for (i, elem) in input.iter().enumerate() {
+        let elem_c_str = to_c_string(&elem);
+        if elem_c_str == std::ptr::null() {
+            free_null_term_array(output);
+            return Err(udi_error_struct{
+                code: UDI_ERROR_NOMEM,
+                msg: std::ptr::null()
+            });
+        }
+        *(output.offset(i as isize)) = elem_c_str;
+    }
+
+    Ok(output)
+}
+
+unsafe
+fn free_null_term_array(input: *const *const libc::c_schar) {
+
+    let mut index = 0;
+    loop {
+        let current = *(input.offset(index));
+        if current != std::ptr::null() {
+            libc::free(current as *mut libc::c_void);
+            index += 1;
+        } else {
+            break;
+        }
+    }
+
+    libc::free(input as *mut libc::c_void);
 }
 
 #[no_mangle]
@@ -871,11 +985,38 @@ fn free_event_list(event_list: *const udi_event_struct)
     while iter != std::ptr::null() {
         let next_event = (*iter).next_event;
 
-        // TODO free event data
+        match (*iter).event_type {
+            UDI_EVENT_ERROR => {
+                let error_event = (*iter).event_data as *const udi_event_error_struct;
+                libc::free((*error_event).errstr as *mut libc::c_void);
+                libc::free(error_event as *mut libc::c_void);
+            },
+            UDI_EVENT_PROCESS_EXEC => {
+                let exec_event = (*iter).event_data as *const udi_event_process_exec_struct;
+                libc::free((*exec_event).path as *mut libc::c_void);
+                free_null_term_array((*exec_event).argv);
+                free_null_term_array((*exec_event).envp);
+                libc::free(exec_event as *mut libc::c_void);
+            },
+            _ => {
+                libc::free((*iter).event_data as *mut libc::c_void);
+            }
+        }
 
         libc::free(iter as *mut libc::c_void);
 
         iter = next_event;
+    }
+}
+
+unsafe
+fn try_malloc(size: libc::size_t) -> Result<*mut libc::c_void, udi_error_struct> {
+    let ptr = libc::malloc(size);
+
+    if ptr != std::ptr::null_mut() {
+        Ok(ptr)
+    } else {
+        Err(udi_error_struct{ code: UDI_ERROR_NOMEM, msg: std::ptr::null() })
     }
 }
 
@@ -933,6 +1074,7 @@ fn get_event_type_str(input: libc::uint32_t) -> *const libc::c_schar
         UDI_EVENT_PROCESS_EXEC => PROCESS_EXEC,
         UDI_EVENT_SINGLE_STEP => SINGLE_STEP,
         UDI_EVENT_PROCESS_CLEANUP => PROCESS_CLEANUP,
+        UDI_EVENT_UNKNOWN => UNKNOWN_STR,
         _ => UNKNOWN_STR
     }
 }
