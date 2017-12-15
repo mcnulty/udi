@@ -33,6 +33,12 @@
             <version>4.11</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>net.libudi</groupId>
+            <artifactId>native-file-tests</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <scope>test</scope>
+        </dependency>
         <!-- list all implementations under test here -->
         <dependency>
             <groupId>net.libudi</groupId>
@@ -59,6 +65,7 @@
                     <systemPropertyVariables>
                         <udi.src.root>${project.parent.basedir}/..</udi.src.root>
                     </systemPropertyVariables>
+                    <forkMode>never</forkMode>
                 </configuration>
             </plugin>
         </plugins>

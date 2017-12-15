@@ -22,7 +22,7 @@ import com.sun.jna.ptr.PointerByReference;
 public interface UdiLibrary extends Library {
 
     /** The library name */
-    public static final String LIBRARY_NAME = "udi";
+    String LIBRARY_NAME = "udi";
 
     // Processes //
 
