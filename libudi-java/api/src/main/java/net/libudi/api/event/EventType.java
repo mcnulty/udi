@@ -11,8 +11,6 @@ package net.libudi.api.event;
 
 /**
  * Enum for the type of a UdiEvent
- *
- * @author mcnulty
  */
 public enum EventType {
 

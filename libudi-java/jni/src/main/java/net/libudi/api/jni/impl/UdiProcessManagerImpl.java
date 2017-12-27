@@ -14,10 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.sun.jna.Library;
-import com.sun.jna.Native;
 import com.sun.jna.Pointer;
-import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.ptr.PointerByReference;
 
 import net.libudi.api.UdiProcess;
@@ -25,11 +22,9 @@ import net.libudi.api.UdiProcessConfig;
 import net.libudi.api.UdiProcessManager;
 import net.libudi.api.event.EventType;
 import net.libudi.api.event.UdiEvent;
-import net.libudi.api.exceptions.InternalLibraryException;
 import net.libudi.api.exceptions.UdiException;
-import net.libudi.api.jni.wrapper.CLibrary;
-import net.libudi.api.jni.wrapper.UdiError;
-import net.libudi.api.jni.wrapper.UdiLibrary;
+import net.libudi.api.jni.wrapper.NativeLibraryHandles;
+import net.libudi.api.jni.wrapper.UdiNativeError;
 import net.libudi.api.jni.wrapper.UdiNativeEvent;
 import net.libudi.api.jni.wrapper.UdiNativeEventBreakpoint;
 import net.libudi.api.jni.wrapper.UdiNativeEventError;
@@ -39,19 +34,8 @@ import net.libudi.api.jni.wrapper.UdiNativeProcConfig;
 
 /**
  * Implementation of UdiProcessManager that utilizes the native libudi bindings
- *
- * @author mcnulty
  */
 public class UdiProcessManagerImpl implements UdiProcessManager {
-
-    /** The native library handle */
-    private final UdiLibrary nativeLibrary;
-
-    /** The native libc handle */
-    private final CLibrary nativeCLibrary;
-
-    /** Used to limit instantiations to one instance */
-    private static boolean instantiated = false;
 
     // These are necessary because a Java object cannot be maintained by the libudi (even though it provides for
     // a way to store a opaque pointer with each process and thread)
@@ -59,27 +43,6 @@ public class UdiProcessManagerImpl implements UdiProcessManager {
     private final Map<Pointer, UdiProcessImpl> procsByPointer = new HashMap<>();
 
     private final Map<Pointer, UdiThreadImpl> threadsByPointer = new HashMap<>();
-
-    /**
-     * Constructor.
-     *
-     * Loads the underlying native library.
-     */
-    public UdiProcessManagerImpl() {
-        synchronized (UdiProcessManagerImpl.class) {
-            if (!instantiated) {
-                instantiated = true;
-            }else{
-                throw new IllegalStateException("Only one instance of " + UdiProcessManagerImpl.class.getSimpleName()
-                        +  " allowed.");
-            }
-        }
-
-        Map<String, Boolean> options = new HashMap<>();
-        options.put(Library.OPTION_ALLOW_OBJECTS, Boolean.TRUE);
-        nativeLibrary = (UdiLibrary) Native.loadLibrary(UdiLibrary.LIBRARY_NAME, UdiLibrary.class, options);
-        nativeCLibrary = (CLibrary) Native.loadLibrary(CLibrary.LIBRARY_NAME, CLibrary.class);
-    }
 
     public UdiProcessImpl getProcess(Pointer process) {
         return procsByPointer.get(process);
@@ -106,9 +69,6 @@ public class UdiProcessManagerImpl implements UdiProcessManager {
             envp = null;
         }
 
-        IntByReference errorCode = new IntByReference();
-        PointerByReference errMsg = new PointerByReference();
-
         String[] actualArgs;
         if (args == null) {
             actualArgs = new String[0];
@@ -116,25 +76,39 @@ public class UdiProcessManagerImpl implements UdiProcessManager {
             actualArgs = args;
         }
 
-        Pointer handle = nativeLibrary.create_process(executable.toAbsolutePath().toString(), actualArgs, envp,
-                new UdiNativeProcConfig(config), errorCode, errMsg);
+        PointerByReference processPointer = new PointerByReference();
 
-        if ( handle == null ) {
-            // Construct the exception
-            String errMsgStr = errMsg.getValue().getString(0);
-            nativeCLibrary.free(errMsg.getPointer());
-
-            throw UdiError.toException(errorCode.getValue(), errMsgStr);
+        Pointer handle;
+        try(UdiNativeError error = NativeLibraryHandles.INSTANCE.getUdiLibrary()
+                                     .create_process(executable.toAbsolutePath().toString(),
+                                                     actualArgs,
+                                                     envp,
+                                                     new UdiNativeProcConfig(config),
+                                                     processPointer)) {
+            error.checkException();
+            handle = processPointer.getValue();
         }
 
-        UdiProcessImpl process = new UdiProcessImpl(handle, nativeLibrary, this);
+        UdiProcessImpl process = new UdiProcessImpl(handle,
+                                                    NativeLibraryHandles.INSTANCE.getUdiLibrary(),
+                                                    this);
         procsByPointer.put(handle, process);
 
-        Pointer initialThread = nativeLibrary.get_initial_thread(handle);
-        if ( initialThread == null ) {
-            throw new NativeLibraryException("Failed to determine initial thread for process");
+        PointerByReference initialThreadPointer = new PointerByReference();
+
+        Pointer initialThread;
+        try (UdiNativeError error = NativeLibraryHandles.INSTANCE.getUdiLibrary()
+                                                                 .get_initial_thread(handle,
+                                                                                     initialThreadPointer)) {
+            error.checkException();
+            initialThread = initialThreadPointer.getValue();
         }
-        threadsByPointer.put(initialThread, new UdiThreadImpl(initialThread, this, nativeLibrary));
+
+        threadsByPointer.put(initialThread,
+                             new UdiThreadImpl(initialThread,
+                                               process,
+                                               this,
+                                               NativeLibraryHandles.INSTANCE.getUdiLibrary()));
 
         return process;
     }
@@ -151,6 +125,17 @@ public class UdiProcessManagerImpl implements UdiProcessManager {
     private UdiEventImpl unpackJavaEvent(UdiNativeEvent event) throws UdiException {
 
         UdiEventImpl eventImpl;
+
+        UdiProcessImpl procImpl = procsByPointer.get(event.proc);
+        if ( procImpl == null ) {
+            throw new NativeLibraryException("Failed to locate UdiProcess for native udi_process");
+        }
+
+        UdiThreadImpl threadImpl = threadsByPointer.get(event.thr);
+        if ( threadImpl == null ) {
+            throw new NativeLibraryException("Failed to locate UdiThread for native udi_thread");
+        }
+
         EventType eventType = EventType.fromIndex(event.event_type);
         switch (eventType) {
             case BREAKPOINT: {
@@ -180,7 +165,10 @@ public class UdiProcessManagerImpl implements UdiProcessManager {
             case THREAD_CREATE: {
                 UdiNativeEventThreadCreate nativeEvThreadCreate = new UdiNativeEventThreadCreate(event.event_data);
 
-                UdiThreadImpl newThread = new UdiThreadImpl(nativeEvThreadCreate.new_thr, this, nativeLibrary);
+                UdiThreadImpl newThread = new UdiThreadImpl(nativeEvThreadCreate.new_thr,
+                                                            procImpl,
+                                                            this,
+                                                            NativeLibraryHandles.INSTANCE.getUdiLibrary());
                 threadsByPointer.put(nativeEvThreadCreate.new_thr, newThread);
 
                 UdiEventThreadCreateImpl threadCreateImpl = new UdiEventThreadCreateImpl();
@@ -196,16 +184,7 @@ public class UdiProcessManagerImpl implements UdiProcessManager {
                 throw new UdiException(String.format("Unknown event encountered with type '%s'", eventType));
         }
 
-        UdiProcessImpl procImpl = procsByPointer.get(event.proc);
-        if ( procImpl == null ) {
-            throw new NativeLibraryException("Failed to locate UdiProcess for native udi_process");
-        }
         eventImpl.setProcess(procImpl);
-
-        UdiThreadImpl threadImpl = threadsByPointer.get(event.thr);
-        if ( threadImpl == null ) {
-            throw new NativeLibraryException("Failed to locate UdiThread for native udi_thread");
-        }
         eventImpl.setThread(threadImpl);
 
         return eventImpl;
@@ -221,10 +200,15 @@ public class UdiProcessManagerImpl implements UdiProcessManager {
             i++;
         }
 
-        UdiNativeEvent event = nativeLibrary.wait_for_events(procs, processes.size());
+        PointerByReference eventPointer = new PointerByReference();
 
-        if ( event == null ) {
-            throw new InternalLibraryException("Failed to wait for events");
+        UdiNativeEvent event;
+        try(UdiNativeError error = NativeLibraryHandles.INSTANCE.getUdiLibrary()
+                                                                .wait_for_events(procs,
+                                                                                 processes.size(),
+                                                                                 eventPointer)) {
+            error.checkException();
+            event = new UdiNativeEvent(eventPointer.getValue());
         }
 
         List<UdiEvent> events = new ArrayList<>();
@@ -234,7 +218,8 @@ public class UdiProcessManagerImpl implements UdiProcessManager {
             iter = iter.next_event;
         }
 
-        nativeLibrary.free_event_list(event);
+        NativeLibraryHandles.INSTANCE.getUdiLibrary()
+                                     .free_event_list(event);
 
         return events;
     }

@@ -13,8 +13,6 @@ import java.nio.file.Path;
 
 /**
  * A bean containing configuration properties for a process under udi control
- *
- * @author mcnulty
  */
 public class UdiProcessConfig {
 

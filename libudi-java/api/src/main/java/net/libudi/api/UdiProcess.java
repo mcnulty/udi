@@ -22,24 +22,26 @@ import net.libudi.api.exceptions.UnexpectedEventException;
  * <p>
  * All methods require the process to be in the stopped state unless otherwise stated
  * </p>
- *
- * @author mcnulty
  */
 public interface UdiProcess extends AutoCloseable {
 
     /**
      * This method does not require the process to be in a stopped state
      *
+     * @throws UdiException on error
+     *
      * @return the id for the process
      */
-    int getPid();
+    int getPid() throws UdiException;
 
     /**
      * This method does not require the process to be in a stopped state
      *
      * @return the architecture for the process
+     *
+     * @throws UdiException on error
      */
-    Architecture getArchitecture();
+    Architecture getArchitecture() throws UdiException;
 
     /**
      * This method does not require the process to be in a stopped state

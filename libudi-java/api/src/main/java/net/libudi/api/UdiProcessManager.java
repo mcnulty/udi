@@ -19,8 +19,6 @@ import net.libudi.api.exceptions.UdiException;
 /**
  * An interface that provides a mechanism to create or attach to debuggee processes and wait for events in a collection
  * of processes.
- *
- * @author mcnulty
  */
 public interface UdiProcessManager {
 

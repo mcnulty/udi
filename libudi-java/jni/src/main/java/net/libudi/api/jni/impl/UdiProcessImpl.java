@@ -15,6 +15,7 @@ import java.util.List;
 
 import com.sun.jna.Memory;
 import com.sun.jna.Pointer;
+import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.ptr.LongByReference;
 
 import net.libudi.api.Architecture;
@@ -27,11 +28,10 @@ import net.libudi.api.exceptions.UdiException;
 import net.libudi.api.exceptions.UnexpectedEventException;
 import net.libudi.api.jni.wrapper.UdiError;
 import net.libudi.api.jni.wrapper.UdiLibrary;
+import net.libudi.api.jni.wrapper.UdiNativeError;
 
 /**
  * Implementation of UdiProcess that utilizes the native bindings
- *
- * @author mcnulty
  */
 public class UdiProcessImpl implements UdiProcess {
 
@@ -68,13 +68,22 @@ public class UdiProcessImpl implements UdiProcess {
     }
 
     @Override
-    public int getPid() {
-        return udiLibrary.get_proc_pid(handle);
+    public int getPid() throws UdiException {
+        IntByReference output = new IntByReference();
+        try (UdiNativeError error = udiLibrary.get_proc_pid(handle, output)) {
+            error.checkException();
+            return output.getValue();
+        }
     }
 
     @Override
-    public Architecture getArchitecture() {
-        return Architecture.fromIndex(udiLibrary.get_proc_architecture(handle));
+    public Architecture getArchitecture() throws UdiException {
+        IntByReference output = new IntByReference();
+
+        try (UdiNativeError error = udiLibrary.get_proc_architecture(handle, output)) {
+            error.checkException();
+            return Architecture.fromIndex(output.getValue());
+        }
     }
 
     @Override

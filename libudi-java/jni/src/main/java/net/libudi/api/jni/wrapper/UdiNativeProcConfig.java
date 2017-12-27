@@ -18,8 +18,6 @@ import net.libudi.api.UdiProcessConfig;
 
 /**
  * The process configuration implementation
- *
- * @author mcnulty
  */
 public class UdiNativeProcConfig extends Structure {
 
