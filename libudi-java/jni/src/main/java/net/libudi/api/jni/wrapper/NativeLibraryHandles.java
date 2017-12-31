@@ -29,9 +29,9 @@ public enum NativeLibraryHandles
     {
         Map<String, Boolean> options = new HashMap<>();
         options.put(Library.OPTION_ALLOW_OBJECTS, Boolean.TRUE);
-        udiLibrary = (UdiLibrary) Native.loadLibrary(UdiLibrary.LIBRARY_NAME, UdiLibrary.class, options);
+        udiLibrary = Native.loadLibrary(UdiLibrary.LIBRARY_NAME, UdiLibrary.class, options);
 
-        cLibrary = (CLibrary) Native.loadLibrary(CLibrary.LIBRARY_NAME, CLibrary.class);
+        cLibrary = Native.loadLibrary(CLibrary.LIBRARY_NAME, CLibrary.class);
     }
 
     public UdiLibrary getUdiLibrary()

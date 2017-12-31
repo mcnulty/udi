@@ -21,6 +21,10 @@
     <packaging>jar</packaging>
     <name>Libudi Java API tests</name>
 
+    <properties>
+        <udi.test.native-file-tests>${project.parent.basedir}/../libudi/native-file-tests</udi.test.native-file-tests>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>net.libudi</groupId>
@@ -63,7 +67,7 @@
                 <version>2.10</version>
                 <configuration>
                     <systemPropertyVariables>
-                        <udi.src.root>${project.parent.basedir}/..</udi.src.root>
+                        <native.file.tests.basePath>${udi.test.native-file-tests}</native.file.tests.basePath>
                     </systemPropertyVariables>
                     <forkMode>never</forkMode>
                     <useFile>false</useFile>

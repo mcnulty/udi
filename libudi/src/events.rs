@@ -10,7 +10,7 @@
 
 extern crate mio;
 
-use std::sync::{Mutex,MutexGuard,Arc};
+use std::sync::{Mutex,Arc};
 use std::collections::HashMap;
 
 use self::mio::{Poll, Events, Ready, PollOpt, Token};
@@ -31,31 +31,24 @@ pub struct Event {
     pub data: EventData
 }
 
-struct ProcessContext<'a> {
-    proc_ref: Arc<Mutex<Process>>,
-    process: MutexGuard<'a, Process>
-}
-
 pub fn wait_for_events(procs: &Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>> {
 
     let poll = Poll::new()?;
     let mut event_procs = HashMap::new();
     for proc_ref in procs {
-        let mut ctx = ProcessContext{
-            proc_ref: proc_ref.clone(),
-            process: proc_ref.lock()?
-        };
 
-        let token = Token(ctx.process.pid as usize);
+        let mut process = proc_ref.lock()?;
+
+        let token = Token(process.pid as usize);
         {
-            let file_context = ctx.process.get_file_context()?;
+            let file_context = process.get_file_context()?;
 
             let event_source = sys::EventSource::new(&file_context.events_file);
 
             poll.register(&event_source, token, Ready::readable(), PollOpt::edge())?;
         }
 
-        event_procs.insert(token, ctx);
+        event_procs.insert(token, proc_ref.clone());
     }
 
     let mut output: Vec<Event> = vec![];
@@ -69,8 +62,8 @@ pub fn wait_for_events(procs: &Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>> {
             let ready = event.readiness();
             if ready.is_readable() || sys::is_event_source_failed(ready) {
                 let event_token = event.token();
-                if let Some(ctx) = event_procs.get_mut(&event_token) {
-                    let event = handle_read_event(&mut *ctx)?;
+                if let Some(proc_ref) = event_procs.get(&event_token) {
+                    let event = handle_read_event(&proc_ref)?;
                     output.push(event);
                 }else{
                     let msg = format!("Unknown event token {:?}", event_token);
@@ -83,21 +76,25 @@ pub fn wait_for_events(procs: &Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>> {
     Ok(output)
 }
 
-fn handle_read_event(ctx: &mut ProcessContext) -> Result<Event> {
+fn handle_read_event(proc_ref: &Arc<Mutex<Process>>) -> Result<Event> {
 
-    match read_event(&mut ctx.process.get_file_context()?.events_file) {
+    let mut process = proc_ref.lock()?;
+
+    match read_event(&mut process.get_file_context()?.events_file) {
         Ok(event_msg) => {
-            let event = handle_event_message(&mut *ctx, event_msg)?;
+            let event = handle_event_message(&proc_ref,
+                                             &mut *process,
+                                             event_msg)?;
 
             Ok(event)
         },
         Err(EventReadError::Eof) => {
             // Process has closed its pipe
-            ctx.process.file_context = None;
+            process.file_context = None;
 
             Ok(Event{
-                process: ctx.proc_ref.clone(),
-                thread: ctx.process.threads[0].clone(),
+                process: proc_ref.clone(),
+                thread: process.threads[0].clone(),
                 data: EventData::ProcessCleanup
             })
         },
@@ -105,13 +102,15 @@ fn handle_read_event(ctx: &mut ProcessContext) -> Result<Event> {
     }
 }
 
-fn handle_event_message(ctx: &mut ProcessContext, message: EventMessage) -> Result<Event> {
+fn handle_event_message(proc_ref: &Arc<Mutex<Process>>,
+                        process: &mut Process,
+                        message: EventMessage) -> Result<Event> {
 
-    ctx.process.running = false;
+    process.running = false;
 
     // Locate the event thread
     let mut t = None;
-    for thr in &(ctx.process.threads) {
+    for thr in &(process.threads) {
         if thr.lock()?.tid == message.tid {
             t = Some(thr.clone());
             break;
@@ -121,7 +120,7 @@ fn handle_event_message(ctx: &mut ProcessContext, message: EventMessage) -> Resu
     let event = match t {
         Some(thr) => {
             Event{
-                process: ctx.proc_ref.clone(),
+                process: proc_ref.clone(),
                 thread: thr,
                 data: message.data
             }
@@ -134,7 +133,7 @@ fn handle_event_message(ctx: &mut ProcessContext, message: EventMessage) -> Resu
 
     match event.data {
         EventData::ThreadCreate{ tid } => {
-            initialize_thread(&mut ctx.process, tid)?;
+            initialize_thread(&mut *process, tid)?;
         },
         EventData::ThreadDeath => {
             // Close the handles maintained by the thread
@@ -142,7 +141,7 @@ fn handle_event_message(ctx: &mut ProcessContext, message: EventMessage) -> Resu
             thr.file_context = None;
         },
         EventData::ProcessExit{ .. } => {
-            ctx.process.terminating = true;
+            process.terminating = true;
         }
         _ => {}
     }

@@ -55,6 +55,9 @@ public class UdiThreadImpl implements UdiThread {
 
     @Override
     public long getTid() throws UdiException {
+
+        parentProcess.checkNotClosed();
+
         LongByReference output = new LongByReference();
         try (UdiNativeError error = udiLibrary.get_tid(handle, output)) {
             error.checkException();
@@ -69,6 +72,9 @@ public class UdiThreadImpl implements UdiThread {
 
     @Override
     public ThreadState getState() throws UdiException {
+
+        parentProcess.checkNotClosed();
+
         IntByReference output = new IntByReference();
         try (UdiNativeError error = udiLibrary.get_state(handle, output)) {
             error.checkException();
@@ -78,6 +84,9 @@ public class UdiThreadImpl implements UdiThread {
 
     @Override
     public UdiThread getNextThread() throws UdiException {
+
+        parentProcess.checkNotClosed();
+
         PointerByReference output = new PointerByReference();
 
         try (UdiNativeError error = udiLibrary.get_next_thread(parentProcess.getHandle(),
@@ -92,6 +101,8 @@ public class UdiThreadImpl implements UdiThread {
     @Override
     public long getPC() throws UdiException {
 
+        parentProcess.checkNotClosed();
+
         LongByReference output = new LongByReference();
 
         try (UdiNativeError error = udiLibrary.get_pc(handle, output)) {
@@ -102,6 +113,9 @@ public class UdiThreadImpl implements UdiThread {
 
     @Override
     public long getNextPC() throws UdiException {
+
+        parentProcess.checkNotClosed();
+
         LongByReference output = new LongByReference();
 
         try (UdiNativeError error = udiLibrary.get_next_instruction(handle, output)) {
@@ -112,6 +126,8 @@ public class UdiThreadImpl implements UdiThread {
 
     @Override
     public long readRegister(Register reg) throws UdiException {
+
+        parentProcess.checkNotClosed();
 
         LongByReference output = new LongByReference();
 
@@ -124,6 +140,8 @@ public class UdiThreadImpl implements UdiThread {
     @Override
     public void writeRegister(Register reg, long value) throws UdiException {
 
+        parentProcess.checkNotClosed();
+
         try (UdiNativeError error = udiLibrary.write_register(handle, reg.getIndex(), value)) {
             error.checkException();
         }
@@ -131,6 +149,9 @@ public class UdiThreadImpl implements UdiThread {
 
     @Override
     public void resume() throws UdiException {
+
+        parentProcess.checkNotClosed();
+
         try (UdiNativeError error = udiLibrary.resume_thread(handle)) {
             error.checkException();
         }
@@ -138,6 +159,9 @@ public class UdiThreadImpl implements UdiThread {
 
     @Override
     public void suspend() throws UdiException {
+
+        parentProcess.checkNotClosed();
+
         try (UdiNativeError error = udiLibrary.suspend_thread(handle)) {
             error.checkException();
         }
@@ -145,6 +169,9 @@ public class UdiThreadImpl implements UdiThread {
 
     @Override
     public void setSingleStep(boolean singleStep) throws UdiException {
+
+        parentProcess.checkNotClosed();
+
         try (UdiNativeError error = udiLibrary.set_single_step(handle, singleStep)) {
             error.checkException();
         }
@@ -153,6 +180,8 @@ public class UdiThreadImpl implements UdiThread {
     @Override
     public boolean getSingleStep() throws UdiException {
 
+        parentProcess.checkNotClosed();
+
         IntByReference output = new IntByReference();
         try (UdiNativeError error = udiLibrary.get_single_step(handle, output)) {
             error.checkException();
@@ -160,8 +189,7 @@ public class UdiThreadImpl implements UdiThread {
         }
     }
 
-    Pointer getHandle()
-    {
+    Pointer getHandle() {
         return handle;
     }
 }
