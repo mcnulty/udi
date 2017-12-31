@@ -268,8 +268,8 @@ unsafe fn to_vec(arr: *const *const libc::c_schar)
     let mut x = 0;
 
     let mut output: Vec<String> = vec![];
-    while arr.offset(x) != std::ptr::null() {
-        let elem = arr.offset(x) as *const libc::c_schar;
+    while *arr.offset(x) != std::ptr::null() {
+        let elem = *arr.offset(x);
 
         let elem_str = match CStr::from_ptr(elem).to_str() {
             Ok(val) => val.to_owned(),

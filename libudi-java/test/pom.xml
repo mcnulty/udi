@@ -66,6 +66,7 @@
                         <udi.src.root>${project.parent.basedir}/..</udi.src.root>
                     </systemPropertyVariables>
                     <forkMode>never</forkMode>
+                    <useFile>false</useFile>
                 </configuration>
             </plugin>
         </plugins>

@@ -38,6 +38,8 @@ import static org.junit.Assert.assertNotNull;
 public abstract class BaseApiUt {
 
     private static final String ROOT_DIR = System.getProperty("java.io.tmpdir");
+    private static final String SIMPLE_BINARY = "simple-debug-noopt-dynamic";
+    private static final String NATIVE_FILE_TEST_PATH = "native.file.tests.basePath";
 
     private final UdiProcessConfig config;
     private final NativeFileTestsInfo nativeFileTestsInfo;
@@ -52,8 +54,8 @@ public abstract class BaseApiUt {
         config = new UdiProcessConfig();
         config.setRootDir(Paths.get(ROOT_DIR, "test-udi"));
 
-        String basePath = System.getProperty("native.file.tests.basePath");
-        assertNotNull(basePath);
+        String basePath = System.getProperty(NATIVE_FILE_TEST_PATH);
+        assertNotNull(NATIVE_FILE_TEST_PATH + " must be set.", basePath);
 
         nativeFileTestsInfo = new NativeFileTestsInfo(Paths.get(basePath));
     }
@@ -68,7 +70,7 @@ public abstract class BaseApiUt {
 
         UdiProcessManager procManager = getProcessManager();
 
-        UdiProcess process = procManager.createProcess(nativeFileTestsInfo.getFirstExecutablePath("simple"),
+        UdiProcess process = procManager.createProcess(nativeFileTestsInfo.getFirstExecutablePath(SIMPLE_BINARY),
                                                        new String[0],
                                                        null, // Need to inherit the current environment
                                                        config);
@@ -79,7 +81,7 @@ public abstract class BaseApiUt {
         UdiEvent event = process.waitForEvent(EventType.PROCESS_EXIT);
         assertNotEquals(event, null);
         assertEquals(event.getEventType(), EventType.PROCESS_EXIT);
-        assertEquals(((UdiEventProcessExit)event).getExitCode(), 1);
+        assertEquals(1, ((UdiEventProcessExit)event).getExitCode());
 
         process.continueProcess();
     }

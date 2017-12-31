@@ -14,6 +14,9 @@ package net.libudi.api.event;
  */
 public enum EventType {
 
+    /** An unknown event */
+    UNKOWN,
+
     /** An error event */
     ERROR,
 
@@ -54,24 +57,26 @@ public enum EventType {
     public static EventType fromIndex(int index) {
         switch(index) {
             case 0:
-                return ERROR;
+                return UNKOWN;
             case 1:
-                return SIGNAL;
+                return ERROR;
             case 2:
-                return BREAKPOINT;
+                return SIGNAL;
             case 3:
-                return THREAD_CREATE;
+                return BREAKPOINT;
             case 4:
-                return THREAD_DEATH;
+                return THREAD_CREATE;
             case 5:
-                return PROCESS_EXIT;
+                return THREAD_DEATH;
             case 6:
-                return PROCESS_FORK;
+                return PROCESS_EXIT;
             case 7:
-                return PROCESS_EXEC;
+                return PROCESS_FORK;
             case 8:
-                return SINGLE_STEP;
+                return PROCESS_EXEC;
             case 9:
+                return SINGLE_STEP;
+            case 10:
                 return PROCESS_CLEANUP;
             default:
                 throw new IllegalArgumentException("No EventType with index " + index);

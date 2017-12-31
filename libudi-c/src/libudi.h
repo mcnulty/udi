@@ -167,14 +167,14 @@ typedef struct udi_proc_config_struct {
  * @param config       the configuration for creating the process
  * @param process      populated on success
  *
- * @return a handle to the created process or NULL on error
+ * @return the result of the operation
  *
  * @return the result of the operation
  * @see execve on a UNIX system
  */
 udi_error create_process(const char *executable,
-                         char * const argv[],
-                         char * const envp[],
+                         const char * const *argv,
+                         const char * const *envp,
                          const udi_proc_config *config,
                          udi_process * const* process);
 
@@ -546,7 +546,7 @@ typedef struct udi_event_process_fork_struct {
  * When udi_event.event_type == UDI_EVENT_PROCESS_EXEC
  * typeof(udi_event.event_data) == udi_event_process_exec
  */
-typedef struct udi_event_process_exec_struct {}
+typedef struct udi_event_process_exec_struct {
     const char *path;
     const char * const *argv;
     const char * const *envp;
@@ -574,7 +574,7 @@ typedef struct udi_event_thread_create_struct {
  */
 typedef struct udi_event_signal_struct {
     uint64_t addr;
-    uint32_t sig
+    uint32_t sig;
 } udi_event_signal;
 
 /**

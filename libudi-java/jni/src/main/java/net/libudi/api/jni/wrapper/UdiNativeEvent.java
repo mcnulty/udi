@@ -30,6 +30,7 @@ public class UdiNativeEvent extends Structure {
     public UdiNativeEvent(Pointer p)
     {
         super(p);
+        this.read();
     }
 
     public int event_type;

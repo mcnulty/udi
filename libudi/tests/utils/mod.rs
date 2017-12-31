@@ -35,7 +35,7 @@ pub fn print_error(e: Error) {
 
 pub fn wait_for_exit(process: &Arc<Mutex<Process>>,
                      thread: &Arc<Mutex<Thread>>,
-                     expected_status: u32) {
+                     expected_status: i32) {
 
     wait_for_event(process, thread, &EventData::ProcessExit{ code: expected_status });
 

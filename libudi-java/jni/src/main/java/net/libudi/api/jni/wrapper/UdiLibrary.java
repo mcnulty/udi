@@ -10,6 +10,7 @@ package net.libudi.api.jni.wrapper;
 
 import com.sun.jna.Library;
 import com.sun.jna.Pointer;
+import com.sun.jna.StringArray;
 import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.ptr.LongByReference;
 import com.sun.jna.ptr.PointerByReference;

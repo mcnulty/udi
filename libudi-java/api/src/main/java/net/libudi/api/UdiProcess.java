@@ -28,9 +28,9 @@ public interface UdiProcess extends AutoCloseable {
     /**
      * This method does not require the process to be in a stopped state
      *
-     * @throws UdiException on error
-     *
      * @return the id for the process
+     *
+     * @throws UdiException on error
      */
     int getPid() throws UdiException;
 
@@ -47,26 +47,34 @@ public interface UdiProcess extends AutoCloseable {
      * This method does not require the process to be in a stopped state
      *
      * @return true, if the process is multithread capable
+     *
+     * @throws UdiException on error
      */
-    boolean isMultithreadCapable();
+    boolean isMultithreadCapable() throws UdiException;
 
     /**
      * This method does not require the process to be in a stopped state
      *
      * @return the initial thread for the process (this can be used to iterate over all the threads)
+     *
+     * @throws UdiException on error
      */
-    UdiThread getInitialThread();
+    UdiThread getInitialThread() throws UdiException;
 
     /**
      * @return true, if the process is running. That is, if the process has been continued and hasn't been stopped by
      * an event yet.
+     *
+     * @throws UdiException on error
      */
-    boolean isRunning();
+    boolean isRunning() throws UdiException;
 
     /**
      * @return true if the process has terminated and is no longer accessible
+     *
+     * @throws UdiException on error
      */
-    boolean isTerminated();
+    boolean isTerminated() throws UdiException;
 
     /**
      * @return true if the process has been initialized but is waiting for the initial continue
