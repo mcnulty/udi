@@ -155,6 +155,7 @@ typedef enum {
  */
 typedef struct udi_proc_config_struct {
     const char *root_dir;
+    const char *rt_lib_path;
 } udi_proc_config;
 
 /*

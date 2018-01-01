@@ -27,6 +27,11 @@ public enum NativeLibraryHandles
 
     NativeLibraryHandles()
     {
+        String libraryPath = System.getProperty("udi.native.lib.searchPath");
+        if (libraryPath != null) {
+            System.setProperty("jna.library.path", libraryPath);
+        }
+
         Map<String, Boolean> options = new HashMap<>();
         options.put(Library.OPTION_ALLOW_OBJECTS, Boolean.TRUE);
         udiLibrary = Native.loadLibrary(UdiLibrary.LIBRARY_NAME, UdiLibrary.class, options);

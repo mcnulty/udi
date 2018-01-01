@@ -13,6 +13,8 @@ use ::std::sync::{Mutex, Arc};
 
 use ::std::collections::HashSet;
 
+use ::std::path::PathBuf;
+
 use udi::Process;
 use udi::Thread;
 use udi::ThreadState;
@@ -20,6 +22,17 @@ use udi::EventData;
 use udi::wait_for_events;
 use udi::Event;
 use udi::Error;
+
+pub fn rt_lib_path() -> Option<String> {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("..");
+    path.push("libudirt");
+    path.push("build");
+    path.push("src");
+    path.push("libudirt.so");
+
+    Some(path.to_str().unwrap().to_owned())
+}
 
 pub fn print_error(e: Error) {
     println!("test failed: {}", e);

@@ -22,7 +22,9 @@
     <name>Libudi Java API tests</name>
 
     <properties>
-        <udi.test.native-file-tests>${project.parent.basedir}/../libudi/native-file-tests</udi.test.native-file-tests>
+        <native.file.tests.basePath>${project.parent.basedir}/../libudi/native-file-tests</native.file.tests.basePath>
+        <udi.native.lib.searchPath>${project.parent.basedir}/../libudi-c/target/debug</udi.native.lib.searchPath>
+        <udi.native.rtlib.path>${project.parent.basedir}/../libudirt/build/src/libudirt.so</udi.native.rtlib.path>
     </properties>
 
     <dependencies>
@@ -67,7 +69,9 @@
                 <version>2.10</version>
                 <configuration>
                     <systemPropertyVariables>
-                        <native.file.tests.basePath>${udi.test.native-file-tests}</native.file.tests.basePath>
+                        <native.file.tests.basePath>${native.file.tests.basePath}</native.file.tests.basePath>
+                        <udi.native.lib.searchPath>${udi.native.lib.searchPath}</udi.native.lib.searchPath>
+                        <udi.native.rtlib.path>${udi.native.rtlib.path}</udi.native.rtlib.path>
                     </systemPropertyVariables>
                     <forkMode>never</forkMode>
                     <useFile>false</useFile>

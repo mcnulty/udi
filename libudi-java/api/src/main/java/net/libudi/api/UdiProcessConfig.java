@@ -18,6 +18,8 @@ public class UdiProcessConfig {
 
     private Path rootDir;
 
+    private Path rtLibPath;
+
     /**
      * @return obtains the full path for the root of the UDI pseudo-filesystem to use for controlling the process
      */
@@ -30,5 +32,15 @@ public class UdiProcessConfig {
      */
     public void setRootDir(Path rootDir) {
         this.rootDir = rootDir;
+    }
+
+    public Path getRtLibPath()
+    {
+        return rtLibPath;
+    }
+
+    public void setRtLibPath(Path rtLibPath)
+    {
+        this.rtLibPath = rtLibPath;
     }
 }

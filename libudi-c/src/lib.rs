@@ -133,6 +133,7 @@ macro_rules! try_unsafe {
 #[repr(C)]
 pub struct udi_proc_config_struct {
     root_dir: *const libc::c_schar,
+    rt_lib_path: *const libc::c_schar
 }
 
 #[no_mangle]
@@ -221,7 +222,23 @@ pub unsafe extern "C" fn create_process(executable: *const libc::c_schar,
         root_dir_str = None;
     }
 
-    let proc_config = ProcessConfig{ root_dir: root_dir_str };
+    let rt_lib_path_str;
+    if (*config).rt_lib_path != std::ptr::null() {
+        rt_lib_path_str = match CStr::from_ptr((*config).rt_lib_path).to_str() {
+            Ok(val) => Some(val.to_owned()),
+            Err(_) => {
+                *process = std::ptr::null();
+                return udi_error_struct{
+                    code: UDI_ERROR_REQUEST,
+                    msg: to_c_string("Process config rt lib path is not a valid UTF-8 string")
+                };
+            }
+        };
+    }else{
+        rt_lib_path_str = None;
+    }
+
+    let proc_config = ProcessConfig::new(root_dir_str, rt_lib_path_str);
 
     match udi::create_process(exec_str, &argv_vec, &envp_vec, &proc_config) {
         Ok(p) => {

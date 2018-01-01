@@ -31,7 +31,7 @@ fn thread_test() -> Result<()> {
 
     let binary_path = native_file_tests::WAITTHREAD_EXEC_PATH;
 
-    let config = udi::ProcessConfig{ root_dir: None };
+    let config = udi::ProcessConfig::new(None, utils::rt_lib_path());
     let envp = Vec::new();
     let argv = vec![ NUM_THREADS.to_string() ];
 

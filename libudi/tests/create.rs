@@ -25,7 +25,7 @@ fn create() {
 
 fn create_test() -> Result<()> {
 
-    let config = udi::ProcessConfig{ root_dir: None };
+    let config = udi::ProcessConfig::new(None, utils::rt_lib_path());
     let argv = Vec::new();
     let envp = Vec::new();
 

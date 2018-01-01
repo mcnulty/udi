@@ -40,6 +40,7 @@ public abstract class BaseApiUt {
     private static final String ROOT_DIR = System.getProperty("java.io.tmpdir");
     private static final String SIMPLE_BINARY = "simple-debug-noopt-dynamic";
     private static final String NATIVE_FILE_TEST_PATH = "native.file.tests.basePath";
+    private static final String RT_LIB_PATH = System.getProperty("udi.native.rtlib.path");
 
     private final UdiProcessConfig config;
     private final NativeFileTestsInfo nativeFileTestsInfo;
@@ -53,6 +54,9 @@ public abstract class BaseApiUt {
     {
         config = new UdiProcessConfig();
         config.setRootDir(Paths.get(ROOT_DIR, "test-udi"));
+        if (RT_LIB_PATH != null) {
+            config.setRtLibPath(Paths.get(RT_LIB_PATH));
+        }
 
         String basePath = System.getProperty(NATIVE_FILE_TEST_PATH);
         assertNotNull(NATIVE_FILE_TEST_PATH + " must be set.", basePath);

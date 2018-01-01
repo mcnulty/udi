@@ -35,7 +35,19 @@ const EVENTS_FILE_NAME: &'static str = "events";
 
 #[derive(Debug)]
 pub struct ProcessConfig {
-    pub root_dir: Option<String>
+    root_dir: Option<String>,
+    rt_lib_path: Option<String>
+}
+
+impl ProcessConfig {
+    pub fn new(root_dir: Option<String>,
+               rt_lib_path: Option<String>) -> ProcessConfig {
+
+        ProcessConfig{
+            root_dir,
+            rt_lib_path
+        }
+    }
 }
 
 /// Creates a new UDI-controlled process
@@ -45,10 +57,15 @@ pub fn create_process(executable: &str,
                       config: &ProcessConfig) -> Result<Arc<Mutex<Process>>> {
 
     let base_root_dir = config.root_dir.clone().unwrap_or(DEFAULT_UDI_ROOT_DIR.to_owned());
+    let rt_lib_path = config.rt_lib_path.clone().unwrap_or(DEFAULT_UDI_RT_LIB_NAME.to_owned());
 
     let root_dir = create_root_udi_filesystem(&base_root_dir)?;
 
-    let mut child = launch_process(executable, argv, envp, &root_dir)?;
+    let mut child = launch_process(executable,
+                                   argv,
+                                   envp,
+                                   &root_dir,
+                                   &rt_lib_path)?;
     let pid = child.id();
 
     let mut root_dir_buf = PathBuf::from(&root_dir);
@@ -186,11 +203,14 @@ pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<()> {
 fn launch_process(executable: &str,
                   argv: &Vec<String>,
                   envp: &Vec<String>,
-                  root_dir: &str) -> Result<::std::process::Child> {
+                  root_dir: &str,
+                  rt_lib_path: &str) -> Result<::std::process::Child> {
 
     let mut command = ::std::process::Command::new(executable);
 
-    let env = create_environment(envp, &root_dir);
+    let env = create_environment(envp,
+                                 root_dir,
+                                 rt_lib_path);
 
     for entry in env {
         command.env(entry.0, entry.1);
@@ -209,7 +229,9 @@ fn launch_process(executable: &str,
 /// created at the end of the array if it does not already exist. Adds the UDI_ROOT_DIR_ENV
 /// environment variable to the end of the array after LD_PRELOAD. This environment variable
 /// is replaced if it already exists.
-fn create_environment(envp: &Vec<String>, root_dir: &str) -> Vec<(String, String)> {
+fn create_environment(envp: &Vec<String>,
+                      root_dir: &str,
+                      rt_lib_path: &str) -> Vec<(String, String)> {
     let mut output;
     if envp.len() == 0 {
         output = vec![];
@@ -231,13 +253,13 @@ fn create_environment(envp: &Vec<String>, root_dir: &str) -> Vec<(String, String
 
         if k == "LD_PRELOAD" {
             v.push_str(":");
-            v.push_str(DEFAULT_UDI_RT_LIB_NAME);
+            v.push_str(rt_lib_path);
             updated_ld_preload = true;
         }
     }
 
     if !updated_ld_preload {
-        output.push(("LD_PRELOAD".to_owned(), DEFAULT_UDI_RT_LIB_NAME.to_owned()));
+        output.push(("LD_PRELOAD".to_owned(), rt_lib_path.to_owned()));
     }
 
     output.push((UDI_ROOT_DIR_ENV.to_owned(), root_dir.to_owned()));
