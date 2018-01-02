@@ -1,8 +1,8 @@
 # UDI Wire Protocol
 
-The UDI protocol encodes messages using [CBOR](cbor.io). There are three types of messages:
-`request`, `response`, or `event`. The message type is determined by the source or destination of
-the message.
+The UDI protocol encodes messages using [CBOR](cbor.io). There are three types
+of messages: `request`, `response`, or `event`. The message type is determined
+by the source or destination of the message.
 
 ## Requests
 
