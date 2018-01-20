@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015, UDI Contributors
+ * Copyright (c) 2011-2018, UDI Contributors
  * All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -285,7 +285,7 @@ uint64_t get_ctf_successor(uint64_t pc, udi_errmsg *errmsg, const void *context)
     ud_set_pc(&ud_obj, pc);
 
     if ( ud_disassemble(&ud_obj) == 0 ) {
-        snprintf(errmsg->msg, errmsg->size, "disassembling instruction at 0x%lx failed", pc);
+        snprintf(errmsg->msg, errmsg->size, "disassembling instruction at 0x%"PRIx64" failed", pc);
         udi_printf("%s\n", errmsg->msg);
         return 0;
     }
@@ -358,10 +358,93 @@ uint64_t get_ctf_successor(uint64_t pc, udi_errmsg *errmsg, const void *context)
     }
 
     if ( successor == 0 ) {
-        snprintf(errmsg->msg, errmsg->size, "failed to determine ctf successor at 0x%lx\n",
+        snprintf(errmsg->msg, errmsg->size, "failed to determine ctf successor at 0x%"PRIx64"\n",
                 pc);
         udi_printf("%s\n", errmsg->msg);
     }
 
     return successor;
+}
+
+int is_gp_register(udi_register_e reg) {
+    switch (reg) {
+        case UDI_X86_GS:
+        case UDI_X86_FS:
+        case UDI_X86_ES:
+        case UDI_X86_DS:
+        case UDI_X86_EDI:
+        case UDI_X86_ESI:
+        case UDI_X86_EBP:
+        case UDI_X86_ESP:
+        case UDI_X86_EBX:
+        case UDI_X86_EDX:
+        case UDI_X86_ECX:
+        case UDI_X86_EAX:
+        case UDI_X86_CS:
+        case UDI_X86_SS:
+        case UDI_X86_EIP:
+        case UDI_X86_FLAGS:
+        case UDI_X86_64_R8:
+        case UDI_X86_64_R9:
+        case UDI_X86_64_R10:
+        case UDI_X86_64_R11:
+        case UDI_X86_64_R12:
+        case UDI_X86_64_R13:
+        case UDI_X86_64_R14:
+        case UDI_X86_64_R15:
+        case UDI_X86_64_RDI:
+        case UDI_X86_64_RSI:
+        case UDI_X86_64_RBP:
+        case UDI_X86_64_RBX:
+        case UDI_X86_64_RDX:
+        case UDI_X86_64_RAX:
+        case UDI_X86_64_RCX:
+        case UDI_X86_64_RSP:
+        case UDI_X86_64_RIP:
+        case UDI_X86_64_CSGSFS:
+        case UDI_X86_64_FLAGS:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+int is_fp_register(udi_register_e reg) {
+    switch (reg) {
+        case UDI_X86_ST0:
+        case UDI_X86_ST1:
+        case UDI_X86_ST2:
+        case UDI_X86_ST3:
+        case UDI_X86_ST4:
+        case UDI_X86_ST5:
+        case UDI_X86_ST6:
+        case UDI_X86_ST7:
+        case UDI_X86_64_ST0:
+        case UDI_X86_64_ST1:
+        case UDI_X86_64_ST2:
+        case UDI_X86_64_ST3:
+        case UDI_X86_64_ST4:
+        case UDI_X86_64_ST5:
+        case UDI_X86_64_ST6:
+        case UDI_X86_64_ST7:
+        case UDI_X86_64_XMM0:
+        case UDI_X86_64_XMM1:
+        case UDI_X86_64_XMM2:
+        case UDI_X86_64_XMM3:
+        case UDI_X86_64_XMM4:
+        case UDI_X86_64_XMM5:
+        case UDI_X86_64_XMM6:
+        case UDI_X86_64_XMM7:
+        case UDI_X86_64_XMM8:
+        case UDI_X86_64_XMM9:
+        case UDI_X86_64_XMM10:
+        case UDI_X86_64_XMM11:
+        case UDI_X86_64_XMM12:
+        case UDI_X86_64_XMM13:
+        case UDI_X86_64_XMM14:
+        case UDI_X86_64_XMM15:
+            return 1;
+        default:
+            return 0;
+    }
 }

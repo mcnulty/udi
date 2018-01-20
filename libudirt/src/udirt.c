@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015, UDI Contributors
+ * Copyright (c) 2011-2018, UDI Contributors
  * All rights reserved.
  * 
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -472,3 +472,29 @@ const char *register_str(udi_register_e reg) {
         default: return "UNSPECIFIED";
     }
 }
+
+int validate_register(udi_register_e reg, udi_errmsg *errmsg) {
+
+    int result = 0;
+    udi_arch_e arch = get_architecture();
+    switch (arch) {
+        case UDI_ARCH_X86:
+            if (reg <= UDI_X86_MIN || reg >= UDI_X86_MAX) {
+                result = -1;
+            }
+            break;
+        case UDI_ARCH_X86_64:
+            if (reg <= UDI_X86_64_MIN || reg >= UDI_X86_64_MAX) {
+                result = -1;
+            }
+            break;
+    }
+
+    if (result != 0) {
+        snprintf(errmsg->msg, errmsg->size, "invalid register %s for architecture %s",
+                register_str(reg), arch_str(arch));
+    }
+
+    return result;
+}
+

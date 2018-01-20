@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017, UDI Contributors
+ * Copyright (c) 2011-2018, UDI Contributors
  * All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -30,11 +30,10 @@
 #include "udirt-posix.h"
 
 // macros
-#define UDI_CONSTRUCTOR __attribute__((constructor))
 #define CASE_TO_STR(x) case x: return #x
 
 // testing
-extern int testing_udirt(void) __attribute__((weak));
+extern int testing_udirt(void) UDI_WEAK;
 
 // constants
 const char * const UDI_DS = "/";
@@ -57,7 +56,7 @@ udirt_fd events_handle = -1;
 static int failed_si_code = 0;
 
 // write failure handling
-static int pipe_write_failure = 0;
+int pipe_write_failure = 0;
 
 // Continue handling
 static int pass_signal = 0;
@@ -75,14 +74,8 @@ static void disable_debugging() {
     udi_enabled = 0;
 
     // Replace the library signal handler with the application signal handlers
-    int i;
-    for(i = 0; i < NUM_SIGNALS; ++i) {
-        if ( signals[i] == SIGPIPE && pipe_write_failure ) continue;
-
-        if ( real_sigaction(signals[i], &app_actions[i], NULL) != 0 ) {
-            udi_printf("failed to reset signal handler for %d: %s\n",
-                    signals[i], strerror(errno));
-        }
+    if ( uninstall_signal_handlers() ) {
+        udi_printf("failed to uninstall signal handlers\n");
     }
 
     udi_printf("%s\n", "Disabled debugging");
@@ -442,8 +435,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
         udi_printf("%s\n", "Ignoring SIGPIPE due to previous library write failure");
         pipe_write_failure = 0;
 
-        real_sigaction(signal, &app_actions[signal_map[signal % MAX_SIGNAL_NUM]], NULL);
-
+        app_signal_handler(signal, siginfo, v_context);
         return;
     }
 
@@ -459,7 +451,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
         return;
     }
 
-    udi_printf(">>> signal entry for 0x%"PRIx64"/%u with %d\n",
+    udi_printf(">>> signal entry for 0x%"PRIx64"/0x%"PRIx64" with %d\n",
             get_user_thread_id(),
             get_kernel_thread_id(),
             signal);
@@ -470,7 +462,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
     thread *thr = get_current_thread();
 
     if ( signal == THREAD_SUSPEND_SIGNAL && (thr == NULL || thr->suspend_pending == 1) ) {
-        udi_printf("ignoring extraneous suspend signal for 0x%"PRIx64"/%u\n",
+        udi_printf("ignoring extraneous suspend signal for 0x%"PRIx64"/0x%"PRIx64"\n",
                 get_user_thread_id(),
                 get_kernel_thread_id());
 
@@ -506,7 +498,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
         }
     }
 
-    udi_printf("thread 0x%"PRIx64"/%u now handling signal %d\n",
+    udi_printf("thread 0x%"PRIx64"/0x%"PRIx64" now handling signal %d\n",
             get_user_thread_id(),
             get_kernel_thread_id(),
             signal);
@@ -601,7 +593,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
         }
     }
 
-    udi_printf("<<< signal exit for 0x%"PRIx64"/%u with %d\n",
+    udi_printf("<<< signal exit for 0x%"PRIx64"/0x%"PRIx64" with %d\n",
             get_user_thread_id(),
             get_kernel_thread_id(),
             signal);

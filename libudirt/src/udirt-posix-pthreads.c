@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017, UDI Contributors
+ * Copyright (c) 2011-2018, UDI Contributors
  * All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -20,9 +20,7 @@
 
 // pthread function types and definitions
 
-// these need to be weak to avoid linking pthreads with 
-// a target that doesn't link pthreads
-
+// these need to be weak to avoid linking pthreads with a target that doesn't link pthreads
 extern int pthread_sigmask(int how, const sigset_t *new_set, sigset_t *old_set) __attribute__((weak));
 extern pthread_t pthread_self() __attribute__((weak));
 

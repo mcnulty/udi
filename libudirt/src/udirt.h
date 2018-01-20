@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017, UDI Contributors
+ * Copyright (c) 2011-2018, UDI Contributors
  * All rights reserved.
  * 
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -154,18 +154,63 @@ uint64_t get_ctf_successor(uint64_t pc, udi_errmsg *errmsg, const void *context)
 
 // register interface //
 
-int get_register(udi_arch_e arch,
-                 udi_register_e reg,
+/**
+ * Validates that the specified register is valid for the debuggee
+ *
+ * @param reg the register
+ * @param errmsg error message (populated on error)
+ *
+ * @param 0 on success; non-zero otherwise
+ */
+int validate_register(udi_register_e reg, udi_errmsg *errmsg);
+
+/**
+ * Gets the specified register, with validation
+ *
+ * @param reg the register to retrieve
+ * @param errmsg the error message (populated on error)
+ * @param value the output parameter for the register value
+ * @param context the context (from which the register is retrieved)
+ *
+ * @return 0 on success; non-zero on failure
+ */
+int get_register(udi_register_e reg,
                  udi_errmsg *errmsg,
                  uint64_t *value,
                  const void *context);
-int set_register(udi_arch_e arch,
-                 udi_register_e reg,
+
+/**
+ * Sets the specified register, with validation
+ *
+ * @param reg the register to retrieve
+ * @param errmsg the error message (populated on error)
+ * @param value the output parameter for the register value
+ * @param context the context (from which the register is retrieved)
+ *
+ * @return 0 on success; non-zero on failure
+ */
+int set_register(udi_register_e reg,
                  udi_errmsg *errmsg,
                  uint64_t value,
                  void *context);
-int is_gp_register(udi_arch_e arch, udi_register_e reg);
-int is_fp_register(udi_arch_e arch, udi_register_e reg);
+
+/**
+ * Check if the specified register is a general-purpose register
+ *
+ * @param reg the register
+ *
+ * @return 0 if the register is not a general purpose register; non-zero otherwise
+ */
+int is_gp_register(udi_register_e reg);
+
+/**
+ * Check if the specified register is a floating-point register
+ *
+ * @param reg the register
+ *
+ * return 0 if the register is not a floating-point register; non-zero otherwise
+ */
+int is_fp_register(udi_register_e reg);
 
 /**
  * Given the context, gets the pc

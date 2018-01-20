@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015, UDI Contributors
+ * Copyright (c) 2011-2018, UDI Contributors
  * All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -22,10 +22,26 @@ typedef int udirt_fd;
 
 #if defined(LINUX)
 
+#define UDI_CONSTRUCTOR __attribute__((constructor))
+#define UDI_WEAK __attribute__((weak))
+
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
+
 // pthreads support
+#include <pthread.h>
 #include <bits/pthreadtypes.h>
 
 #endif /* LINUX */
+
+#if defined(DARWIN)
+
+#define UDI_CONSTRUCTOR __attribute__((constructor))
+#define UDI_WEAK __attribute__((weak_import))
+#define _DARWIN_C_SOURCE 1
+
+#endif /* DARWIN */
 
 #else /* UNIX */
 

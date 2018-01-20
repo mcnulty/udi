@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015, UDI Contributors
+ * Copyright (c) 2011-2018, UDI Contributors
  * All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#define _GNU_SOURCE
+#include "udirt-platform.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -25,188 +25,6 @@
 
 #include "udirt-posix.h"
 
-// exported constants //
-
-// library wrapping
-void *UDI_RTLD_NEXT = RTLD_NEXT;
-
-// register interface
-
-// x86
-#ifndef REG_GS
-#define REG_GS -1
-#endif
-int X86_GS_OFFSET = REG_GS;
-
-#ifndef REG_FS
-#define REG_FS -1
-#endif
-int X86_FS_OFFSET = REG_FS;
-
-#ifndef REG_ES
-#define REG_ES -1
-#endif
-int X86_ES_OFFSET = REG_ES;
-
-#ifndef REG_DS
-#define REG_DS -1
-#endif
-int X86_DS_OFFSET = REG_DS;
-
-#ifndef REG_EDI
-#define REG_EDI -1
-#endif
-int X86_EDI_OFFSET = REG_EDI;
-
-#ifndef REG_ESI
-#define REG_ESI -1
-#endif
-int X86_ESI_OFFSET = REG_ESI;
-
-#ifndef REG_EBP
-#define REG_EBP -1
-#endif
-int X86_EBP_OFFSET = REG_EBP;
-
-#ifndef REG_ESP
-#define REG_ESP -1
-#endif
-int X86_ESP_OFFSET = REG_ESP;
-
-#ifndef REG_EBX
-#define REG_EBX -1
-#endif
-int X86_EBX_OFFSET = REG_EBX;
-
-#ifndef REG_EDX
-#define REG_EDX -1
-#endif
-int X86_EDX_OFFSET = REG_EDX;
-
-#ifndef REG_ECX
-#define REG_ECX -1
-#endif
-int X86_ECX_OFFSET = REG_ECX;
-
-#ifndef REG_EAX
-#define REG_EAX -1
-#endif
-int X86_EAX_OFFSET = REG_EAX;
-
-#ifndef REG_CS
-#define REG_CS -1
-#endif
-int X86_CS_OFFSET = REG_CS;
-
-#ifndef REG_SS
-#define REG_SS -1
-#endif
-int X86_SS_OFFSET = REG_SS;
-
-#ifndef REG_EIP
-#define REG_EIP -1
-#endif
-int X86_EIP_OFFSET = REG_EIP;
-
-#ifndef REG_EFL
-#define REG_EFL -1
-#endif
-int X86_FLAGS_OFFSET = REG_EFL;
-
-// x86_64
-
-#ifndef REG_R8
-#define REG_R8 -1
-#endif
-int X86_64_R8_OFFSET = REG_R8;
-
-#ifndef REG_R9
-#define REG_R9 -1
-#endif
-int X86_64_R9_OFFSET = REG_R9;
-
-#ifndef REG_R10
-#define REG_R10 -1
-#endif
-int X86_64_R10_OFFSET = REG_R10;
-
-#ifndef REG_R11
-#define REG_R11 -1
-#endif
-int X86_64_R11_OFFSET = REG_R11;
-
-#ifndef REG_R12
-#define REG_R12 -1
-#endif
-int X86_64_R12_OFFSET = REG_R12;
-
-#ifndef REG_R13
-#define REG_R13 -1
-#endif
-int X86_64_R13_OFFSET = REG_R13;
-
-#ifndef REG_R14
-#define REG_R14 -1
-#endif
-int X86_64_R14_OFFSET = REG_R14;
-
-#ifndef REG_R15
-#define REG_R15 -1
-#endif
-int X86_64_R15_OFFSET = REG_R15;
-
-#ifndef REG_RDI
-#define REG_RDI -1
-#endif
-int X86_64_RDI_OFFSET = REG_RDI;
-
-#ifndef REG_RSI
-#define REG_RSI -1
-#endif
-int X86_64_RSI_OFFSET = REG_RSI;
-
-#ifndef REG_RBP
-#define REG_RBP -1
-#endif
-int X86_64_RBP_OFFSET = REG_RBP;
-
-#ifndef REG_RBX
-#define REG_RBX -1
-#endif
-int X86_64_RBX_OFFSET = REG_RBX;
-
-#ifndef REG_RDX
-#define REG_RDX -1
-#endif
-int X86_64_RDX_OFFSET = REG_RDX;
-
-#ifndef REG_RAX
-#define REG_RAX -1
-#endif
-int X86_64_RAX_OFFSET = REG_RAX;
-
-#ifndef REG_RCX
-#define REG_RCX -1
-#endif
-int X86_64_RCX_OFFSET = REG_RCX;
-
-#ifndef REG_RSP
-#define REG_RSP -1
-#endif
-int X86_64_RSP_OFFSET = REG_RSP;
-
-#ifndef REG_RIP
-#define REG_RIP -1
-#endif
-int X86_64_RIP_OFFSET = REG_RIP;
-
-#ifndef REG_CSGSFS
-#define REG_CSGSFS -1
-#endif
-int X86_64_CSGSFS_OFFSET = REG_CSGSFS;
-
-int X86_64_FLAGS_OFFSET = REG_EFL;
-
 /**
  * Searches for a symbol in the object that is loaded at the specified address
  *
@@ -218,8 +36,10 @@ int X86_64_FLAGS_OFFSET = REG_EFL;
  * @return 0 on success; non-zero on failure
  */
 static
-int search_for_sym(void *object_load_addr, const char *sym_name, unsigned long loaded_offset, 
-        unsigned long *addr) 
+int search_for_sym(void *object_load_addr,
+                   const char *sym_name,
+                   unsigned long loaded_offset,
+                   unsigned long *addr)
 {
 
     ElfW(Ehdr) *ehdr = (ElfW(Ehdr) *)object_load_addr;
@@ -289,8 +109,10 @@ int search_for_sym(void *object_load_addr, const char *sym_name, unsigned long l
  * @return 0 on success; non-zero otherwise
  */
 static
-int search_for_sym_in_obj(const char *object_path, const char *sym_name, unsigned long loaded_offset, 
-        unsigned long *addr) 
+int search_for_sym_in_obj(const char *object_path,
+                          const char *sym_name,
+                          unsigned long loaded_offset,
+                          unsigned long *addr)
 {
     // temporarily load the full object to get access to the symbols
     int obj_fd = open(object_path, O_RDONLY);
@@ -374,7 +196,7 @@ int get_sym_addr(const char *object_name, const char *sym_name, unsigned long *a
 void (*pthreads_create_event)(void) = NULL;
 void (*pthreads_death_event)(void) = NULL;
 
-// start thread_db support
+// thread_db support
 
 static
 const char *THREAD_DB = "libthread_db.so";
@@ -445,14 +267,6 @@ int enable_thread_events(const td_thrhandle_t *handle, udi_errmsg *errmsg) {
     return 0;
 }
 
-
-/**
- * Initializes the newly created thread
- *
- * @param errmsg the error message (populated on error)
- *
- * @return the tid on success; 0 on failure
- */
 uint64_t initialize_thread(udi_errmsg *errmsg) {
 
     td_err_e td_ret;
@@ -479,13 +293,6 @@ uint64_t initialize_thread(udi_errmsg *errmsg) {
     return (uint64_t)new_info.ti_tid;
 }
 
-/**
- * Determines the thread that is in the process of being finalized
- *
- * @param errmsg the error message
- *
- * @return the tid for the finalized thread, 0 on error
- */   
 uint64_t finalize_thread(udi_errmsg *errmsg) {
 
     /* for some reason, libthread_db is not returning consistent results for td_thr_event_getmsg
@@ -529,13 +336,6 @@ uint64_t finalize_thread(udi_errmsg *errmsg) {
     return get_user_thread_id();
 }
 
-/**
- * Initializes pthreads support
- *
- * @param errmsg the errmsg populated on error
- *
- * @return 0 on success; non-zero on failure
- */
 int initialize_pthreads_support(udi_errmsg *errmsg) {
     // Need to load and initialize thread_db
     if (get_multithread_capable()) {
@@ -666,7 +466,7 @@ int initialize_pthreads_support(udi_errmsg *errmsg) {
 
         pthreads_death_event = (void(*)(void))notify_death.u.bptaddr;
     }
-    
+
     return 0;
 }
 
@@ -794,9 +594,6 @@ ps_err_e ps_lcontinue(const struct ps_prochandle *handle, lwpid_t lwp) {
 
 // end thread_db support
 
-/**
- * @return the kernel thread id for the currently executing thread
- */
-uint32_t get_kernel_thread_id() {
-    return (uint32_t)syscall(SYS_gettid);
+uint64_t get_kernel_thread_id() {
+    return (uint64_t)syscall(SYS_gettid);
 }

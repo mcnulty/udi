@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015, UDI Contributors
+ * Copyright (c) 2011-2018, UDI Contributors
  * All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-// OS related handling (syscalls and signals)
+// OS related handling (syscalls, signals, library loading)
 
 // This header needs to be included first because it sets feature macros
 #include "udirt-platform.h"
@@ -20,6 +20,11 @@ void (*signal(int signum, void (*handler)(int)) )(int) __asm__ ("" "signal");
 #include <inttypes.h>
 #include <errno.h>
 #include <stdlib.h>
+
+// exported constants //
+
+// library wrapping
+void *UDI_RTLD_NEXT = RTLD_NEXT;
 
 // Signal handling
 int signals[] = {
@@ -37,7 +42,11 @@ int signals[] = {
     SIGPIPE,
     SIGALRM,
     SIGTERM,
+#if defined(SIGSTKFLT)
     SIGSTKFLT,
+#else
+    0,
+#endif
     SIGCHLD,
     SIGCONT,
     SIGTSTP,
@@ -50,13 +59,24 @@ int signals[] = {
     SIGPROF,
     SIGWINCH,
     SIGIO,
+#if defined(SIGPWR)
     SIGPWR,
+#else
+    0,
+#endif
     SIGSYS
 };
 
-struct sigaction app_actions[NUM_SIGNALS];
-int signal_map[MAX_SIGNAL_NUM]; // Used to map signals to their application action
-struct sigaction default_lib_action;
+// This is the number of elements in the signals array
+#define NUM_SIGNALS 29
+
+struct app_sigaction {
+    int signal;
+    struct sigaction action;
+};
+
+static struct app_sigaction app_actions[NUM_SIGNALS];
+static struct sigaction default_lib_action;
 
 int exiting = 0;
 
@@ -204,7 +224,7 @@ pid_t fork() {
     }else{
         uint64_t thread_id = get_user_thread_id();
 
-        udi_printf(">>> fork entry for 0x%"PRIx64"/%u\n",
+        udi_printf(">>> fork entry for 0x%"PRIx64"/0x%"PRIx64"\n",
                    get_user_thread_id(),
                    get_kernel_thread_id());
 
@@ -292,13 +312,25 @@ int sigaction(int signum, const struct sigaction *act,
         if ( result != 0 ) break;
 
         // Store new application action for future use
-        int signal_index = signal_map[(signum % MAX_SIGNAL_NUM)];
-        if ( oldact != NULL ) {
-            *oldact = app_actions[signal_index];
+
+        int found = 0;
+        int i;
+        for (i = 0; i < NUM_SIGNALS; ++i) {
+            if (i == signum) {
+                found = 1;
+                if ( oldact != NULL ) {
+                    *oldact = app_actions[i].action;
+                }
+
+                if ( act != NULL ) {
+                    app_actions[i].action = *act;
+                }
+            }
         }
 
-        if ( act != NULL ) {
-            app_actions[signal_index] = *act;
+        if ( !found ) {
+            udi_printf("failed to intercept call to sigaction for %d\n", signum);
+            return EINVAL;
         }
     }while(0);
 
@@ -352,33 +384,42 @@ int handle_event_breakpoint(breakpoint *bp, const void *in_context, udi_errmsg *
  *
  * See manpage for SA_SIGINFO function.
  */
-void app_signal_handler(int signal, siginfo_t *siginfo, void *v_context) {
-    int signal_index = signal_map[(signal % MAX_SIGNAL_NUM)];
+void app_signal_handler(int signum, siginfo_t *siginfo, void *v_context) {
 
-    if ( (void *)app_actions[signal_index].sa_sigaction == (void *)SIG_IGN ) {
-        udi_printf("Signal %d ignored, not passing to application\n", signal);
+    struct app_sigaction *app_action = NULL;
+    for (int i = 0; i < NUM_SIGNALS; ++i) {
+        if (app_actions[i].signal == signum) {
+            app_action = &app_actions[i];
+        }
+    }
+
+    if (app_action == NULL) {
+        udi_printf("Signal %d does not have an app action\n", signum);
         return;
     }
 
-    if ( (void *)app_actions[signal_index].sa_sigaction == (void *)SIG_DFL ) {
+    if ( (void *)app_action->action.sa_sigaction == (void *)SIG_IGN ) {
+        udi_printf("Signal %d ignored, not passing to application\n", signum);
+        return;
+    }
+
+    if ( (void *)app_actions->action.sa_sigaction == (void *)SIG_DFL ) {
         // TODO need to emulate the default action
         return;
     }
 
     sigset_t cur_set;
-
-    if ( setsigmask(SIG_SETMASK, &app_actions[signal_index].sa_mask, 
-            &cur_set) != 0 )
+    if ( setsigmask(SIG_SETMASK, &app_actions->action.sa_mask, &cur_set) != 0 )
     {
         udi_printf("failed to adjust blocked signals for application handler: %s\n",
-                strerror(errno));
+                   strerror(errno));
     }
 
-    app_actions[signal_index].sa_sigaction(signal, siginfo, v_context);
+    app_actions->action.sa_sigaction(signum, siginfo, v_context);
 
     if ( setsigmask(SIG_SETMASK, &cur_set, NULL) != 0 ) {
         udi_printf("failed to reset blocked signals after application handler: %s\n",
-                strerror(errno));
+                   strerror(errno));
     }
 }
 
@@ -388,22 +429,6 @@ void app_signal_handler(int signal, siginfo_t *siginfo, void *v_context) {
  * @return 0 on success; non-zero on failure
  */
 int setup_signal_handlers() {
-    int errnum = 0;
-
-    // Define the default sigaction for the library
-    memset(&default_lib_action, 0, sizeof(struct sigaction));
-    default_lib_action.sa_sigaction = signal_entry_point;
-    sigfillset(&(default_lib_action.sa_mask));
-    default_lib_action.sa_flags = SA_SIGINFO | SA_NODEFER;
-
-    // initialize application sigactions and signal map
-    int i;
-    for (i = 0; i < NUM_SIGNALS; ++i) {
-        memset(&app_actions[i], 0, sizeof(struct sigaction));
-        app_actions[i].sa_handler = SIG_DFL;
-
-        signal_map[(signals[i] % MAX_SIGNAL_NUM)] = i;
-    }
 
     // Sanity check
     if ( (sizeof(signals) / sizeof(int)) != NUM_SIGNALS ) {
@@ -411,12 +436,44 @@ int setup_signal_handlers() {
         return -1;
     }
 
+    // Define the default sigaction for the library
+    memset(&default_lib_action, 0, sizeof(struct sigaction));
+    default_lib_action.sa_sigaction = signal_entry_point;
+    sigfillset(&(default_lib_action.sa_mask));
+    default_lib_action.sa_flags = SA_SIGINFO | SA_NODEFER;
+
+    // initialize application sigactions
+    int i;
+    for (i = 0; i < NUM_SIGNALS; ++i) {
+        memset(&app_actions[i], 0, sizeof(struct app_sigaction));
+        app_actions[i].signal = i;
+        app_actions[i].action.sa_handler = SIG_DFL;
+    }
+
+    int errnum = 0;
     for(i = 0; i < NUM_SIGNALS; ++i) {
-        if ( real_sigaction(signals[i], &default_lib_action, &app_actions[i]) != 0 ) {
+        if ( real_sigaction(signals[i], &default_lib_action, &(app_actions[i].action)) != 0 ) {
             errnum = errno;
             break;
         }
     }
 
     return errnum;
+}
+
+int uninstall_signal_handlers() {
+    int i;
+    for(i = 0; i < NUM_SIGNALS; ++i) {
+        if ( signals[i] == 0 ) continue;
+
+        if ( signals[i] == SIGPIPE && pipe_write_failure ) continue;
+
+        if ( real_sigaction(signals[i], &(app_actions[i].action), NULL) != 0 ) {
+            udi_printf("failed to reset signal handler for %d: %s\n",
+                    signals[i], strerror(errno));
+            return errno;
+        }
+    }
+
+    return 0;
 }

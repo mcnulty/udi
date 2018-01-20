@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017, UDI Contributors
+ * Copyright (c) 2011-2018, UDI Contributors
  * All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -1212,8 +1212,7 @@ int read_register_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_er
     }
 
     uint64_t value;
-    result = get_register(get_architecture(),
-                          req.reg,
+    result = get_register(req.reg,
                           errmsg,
                           &value,
                           get_thread_context(thr));
@@ -1310,8 +1309,7 @@ int write_register_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_e
         return RESULT_FAILURE;
     }
 
-    result = set_register(get_architecture(),
-                          req.reg,
+    result = set_register(req.reg,
                           errmsg,
                           req.value,
                           get_thread_context(thr));

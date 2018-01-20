@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015, UDI Contributors
+ * Copyright (c) 2011-2018, UDI Contributors
  * All rights reserved.
  * 
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -62,26 +62,33 @@ int get_exit_argument(const ucontext_t *context, int *status, udi_errmsg *errmsg
 // library wrapping
 extern void *UDI_RTLD_NEXT;
 
-// breakpoint handling
+// breakpoint handling //
+
+/**
+ * Given the context, calculates the address at which a trap occurred at.
+ *
+ * @param context the context containing the current PC value
+ *
+ * @return the computed address
+ */
 uint64_t get_trap_address(const ucontext_t *context);
 
-// context modification
+/**
+ * Given the context, sets the pc to the supplied value
+ *
+ * @param context the context containing the current PC value
+ * @param pc the new pc value
+ */
 void set_pc(ucontext_t *context, unsigned long pc);
 
 // signal handling
-
-#define MAX_SIGNAL_NUM 31
-
-// This is the number of elements in the signals array
-#define NUM_SIGNALS 29
-
-extern int signal_map[];
-extern int signals[];
-extern struct sigaction app_actions[];
-
 int setup_signal_handlers();
+int uninstall_signal_handlers();
 void app_signal_handler(int signal, siginfo_t *siginfo, void *v_context);
 void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context);
+
+// write failure handling
+extern int pipe_write_failure;
 
 // pthreads support //
 
@@ -112,7 +119,11 @@ struct thread_struct {
 };
 
 int setsigmask(int how, const sigset_t *new_set, sigset_t *old_set);
-uint32_t get_kernel_thread_id();
+
+/**
+ * @return the kernel thread id for the currently executing thread
+ */
+uint64_t get_kernel_thread_id();
 
 // thread synchronization
 typedef struct udi_barrier_struct {
@@ -128,6 +139,13 @@ int release_other_threads();
 extern void (*pthreads_create_event)(void);
 extern void (*pthreads_death_event)(void);
 
+/**
+ * Initializes pthreads support
+ *
+ * @param errmsg the errmsg populated on error
+ *
+ * @return 0 on success; non-zero on failure
+ */
 int initialize_pthreads_support(udi_errmsg *errmsg);
 
 int install_thread_event_breakpoints(udi_errmsg *errmsg);
@@ -139,10 +157,27 @@ int handle_thread_event_breakpoint(breakpoint *bp,
 thread *create_initial_thread();
 int thread_create_callback(thread *thr, udi_errmsg *errmsg);
 int thread_create_handshake(thread *thr, udi_errmsg *errmsg);
+
+/**
+ * Initializes the newly created thread
+ *
+ * @param errmsg the error message (populated on error)
+ *
+ * @return the tid on success; 0 on failure
+ */
 uint64_t initialize_thread(udi_errmsg *errmsg);
 
 int thread_death_callback(thread *thr, udi_errmsg *errmsg);
+
+/**
+ * Determines the thread that is in the process of being finalized
+ *
+ * @param errmsg the error message
+ *
+ * @return the tid for the finalized thread, 0 on error
+ */
 uint64_t finalize_thread(udi_errmsg *errmsg);
+
 void destroy_thread(thread *thr);
 
 #ifdef __cplusplus
