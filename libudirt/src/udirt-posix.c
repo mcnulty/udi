@@ -81,11 +81,6 @@ static void disable_debugging() {
     udi_printf("%s\n", "Disabled debugging");
 }
 
-/**
- * @return non-zero if a single thread will be executing due to a library operation (such as
- * a memory access to a non-accessible address or a single-step event)
- */
-static inline
 int single_thread_executing() {
     return (is_performing_mem_access() || continue_bp != NULL);
 }
@@ -262,14 +257,6 @@ int block_for_request(thread **thr) {
     return RESULT_ERROR;
 }
 
-/**
- * Wait for and request and process the request on reception.
- *
- * @param errmsg error message populate on error
- * @param thr populated by the thread that received the command
- *
- * @return request handler return code
- */
 int wait_and_execute_command(udi_errmsg *errmsg, thread **thr) {
     int result = 0;
 
@@ -563,7 +550,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
 
             int error_result = handle_error_event(get_user_thread_id(), &errmsg);
             if (error_result != RESULT_SUCCESS) {
-                udi_printf("aborting due to event reporting failure: %s", errmsg.msg);
+                udi_printf("aborting due to event reporting failure: %s\n", errmsg.msg);
                 udi_abort(__FILE__, __LINE__);
             }
         }
@@ -740,21 +727,15 @@ static int create_udi_filesystem() {
     return errnum;
 }
 
-/// barrier used to synchronize actions with other threads
-static udi_barrier thread_barrier = { 0, -1, -1 };
+udi_barrier thread_barrier = { 0, -1, -1 };
 
-/**
- * Initializes the thread synchronization mechanism
- *
- * @return 0 on success; non-zero on failure
- */
 int initialize_thread_sync() {
     thread_barrier.sync_var = 0;
 
     if ( get_multithread_capable() ) {
         int control_pipe[2];
         if ( pipe(control_pipe) != 0 ) {
-            udi_printf("failed to create sync pipe for rendezvous: %s\n", strerror(errno));
+            udi_printf("failed to create sync pipe for barrier: %s\n", strerror(errno));
             return -1;
         }
 
@@ -768,24 +749,11 @@ int initialize_thread_sync() {
     return 0;
 }
 
-/// the sentinel used to send signals to other threads
-static const unsigned char sentinel = 0x21;
+const unsigned char sentinel = 0x21;
 
-/**
- * The first thread that calls this function forces all other threads into the UDI signal handler,
- * which eventually routes to this function.
- *
- * If a thread isn't the first thread calling this function, it will block until the library
- * decides the thread should continue executing, which is a combination of the user's desired
- * run state for a thread and the libraries desired run state for a thread.
- *
- * @return less than 0 if there is an error
- * @return 0 if the thread was the first thread or the thread should handle its event now
- * @return greater than 0 if the thread was not the first thread
- */
 int block_other_threads() {
-
     int result = 0;
+
     if (get_multithreaded()) {
         thread *thr = get_current_thread();
         if ( thr == NULL ) {
@@ -810,17 +778,17 @@ int block_other_threads() {
                     if (iter->ts != UDI_TS_SUSPENDED) {
                         if ( pthread_kill((pthread_t)iter->id, THREAD_SUSPEND_SIGNAL) != 0 ) {
                             udi_printf("failed to send signal to 0x%"PRIx64"\n",
-                                    iter->id);
+                                       iter->id);
                             return -1;
                         }
                         udi_printf("thread 0x%"PRIx64" sent suspend signal %d to thread 0x%"PRIx64"\n",
-                                thr->id,
-                                THREAD_SUSPEND_SIGNAL,
-                                iter->id);
+                                   thr->id,
+                                   THREAD_SUSPEND_SIGNAL,
+                                   iter->id);
                         num_suspended++;
                     }else{
                         udi_printf("thread 0x%"PRIx64" already suspended, not signalling\n",
-                                iter->id);
+                                   iter->id);
                     }
                 }
                 iter = iter->next_thread;
@@ -851,7 +819,7 @@ int block_other_threads() {
             }
 
             udi_printf("thread 0x%"PRIx64" waiting to be released (pending signal = %d)\n", thr->id,
-                    thr->event_state.signal);
+                       thr->event_state.signal);
 
             // Indicate that another suspend signal is pending if the reason for the thread
             // to enter the handler was not triggered by the library
@@ -881,14 +849,6 @@ int block_other_threads() {
     return result;
 }
 
-/**
- * Releases the other threads that are blocked in block_other_threads
- *
- * Marks any threads that were created during this request handling
- *
- * @return 0 on success
- * @return non-zero on failure
- */
 int release_other_threads() {
     if (get_multithread_capable()) {
         thread *thr = get_current_thread();
@@ -901,19 +861,27 @@ int release_other_threads() {
             // another source external to the library but at the same time, the library sends the same
             // signal to the thread. The result is that there is no way to handle the externally
             // sourced signal.
-            if ( iter != thr && iter->event_state.signal != THREAD_SUSPEND_SIGNAL && iter->event_state.signal != 0 ) break;
+            if ( iter != thr &&
+                 iter->event_state.signal != THREAD_SUSPEND_SIGNAL &&
+                 iter->event_state.signal != 0 ) {
+                break;
+            }
             iter = iter->next_thread;
         }
 
         if ( iter != thr && iter != NULL ) {
             // Found another event that needs to be handled
 
-            if ( thr != NULL ) __sync_val_compare_and_swap(&(thr->control_thread), 1, 0);
+            if ( thr != NULL ) {
+                __sync_val_compare_and_swap(&(thr->control_thread), 1, 0);
+            }
 
             __sync_val_compare_and_swap(&(iter->control_thread), 0, 1);
 
             if ( write(iter->control_write, &sentinel, 1) != 1 ) {
-                udi_printf("failed to write control trigger to pipe: %s\n", strerror(errno));
+                udi_printf("failed to write control trigger to pipe for 0x%"PRIx64": %s\n",
+                           iter->id,
+                           strerror(errno));
                 return -1;
             }
 
@@ -942,22 +910,17 @@ int release_other_threads() {
             iter = get_thread_list();
             while ( iter != NULL ) {
                 if ( iter != thr && iter->ts == UDI_TS_RUNNING ) {
-                    if ( iter->alive ) {
-                        if ( write(iter->control_write, &sentinel, 1) != 1 ) {
-                            udi_printf("failed to write control trigger to pipe: %s\n",
-                                    strerror(errno));
-                            return -1;
-                        }
-                    }else{
-                        udi_printf("Marking 0x%"PRIx64" alive\n", iter->id);
-                        iter->alive = 1;
+                    if ( write(iter->control_write, &sentinel, 1) != 1 ) {
+                        udi_printf("failed to write control trigger to pipe for 0x%"PRIx64": %s\n",
+                                   iter->id,
+                                   strerror(errno));
+                        return -1;
                     }
                 }
                 iter = iter->next_thread;
             }
 
             udi_printf("thread 0x%"PRIx64" released other threads\n", get_user_thread_id());
-
 
             if ( thr != NULL && thr->ts == UDI_TS_SUSPENDED ) {
                 // If the current thread was suspended in this signal handler call, block here
@@ -1026,14 +989,6 @@ char *get_thread_file(thread *thr, char *thread_dir, const char *filename) {
     return thread_file;
 }
 
-/**
- * Called by the thread support implementation
- *
- * @param thr the thread structure for the created thread
- * @param errmsg the error message
- *
- * @return 0 on success; non-zero on failure
- */
 int thread_create_callback(thread *thr, udi_errmsg *errmsg) {
 
     // create the filesystem elements
@@ -1115,14 +1070,6 @@ int thread_create_response_fd_callback(void *ctx, udirt_fd *resp_fd, udi_errmsg 
     return RESULT_SUCCESS;
 }
 
-/**
- * Performs the handshake with the debugger after the creation of the thread files
- *
- * @param thr the thread structure for the created thread
- * @param errmsg the error message
- *
- * @return 0 on success; non-zero on failure
- */
 int thread_create_handshake(thread *thr, udi_errmsg *errmsg) {
 
     char *thread_dir = NULL, *response_file = NULL, *request_file = NULL;
@@ -1185,14 +1132,6 @@ int thread_create_handshake(thread *thr, udi_errmsg *errmsg) {
     return result;
 }
 
-/**
- * Called by the thread support implementation before thread event is published
- *
- * @param thr the thread structure for the dead thread
- * @param errmsg the error message
- *
- * @return 0 on success; non-zero on failure
- */
 int thread_death_callback(thread *thr, udi_errmsg *errmsg) {
     thr->dead = 1;
     udi_printf("thread 0x%"PRIx64" marked dead\n", thr->id);
@@ -1208,14 +1147,6 @@ int thread_death_callback(thread *thr, udi_errmsg *errmsg) {
     return 0;
 }
 
-/**
- * Called before the process is continued after a thread death event was published
- *
- * @param thr the thread structure for the dead thread
- * @param errmsg the error message
- *
- * @return 0 on success; non-zero on failure
- */
 int thread_death_handshake(thread *thr, udi_errmsg *errmsg) {
 
     if (!thr->dead) {
@@ -1417,7 +1348,7 @@ void init_udirt() {
             break;
         }
 
-        if ( initialize_pthreads_support(&errmsg) != 0 ) {
+        if ( locate_thread_wrapper_functions(&errmsg) != 0) {
             result = RESULT_ERROR;
             break;
         }

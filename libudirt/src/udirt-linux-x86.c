@@ -537,15 +537,14 @@ int get_fp_register(udi_register_e reg,
     return -1;
 }
 
-int get_register(udi_arch_e arch,
-                 udi_register_e reg,
+int get_register(udi_register_e reg,
                  udi_errmsg *errmsg,
                  uint64_t *value,
                  const void *context)
 {
     const ucontext_t *u_context = (const ucontext_t *)context;
 
-    if (validate_register(arch, reg, errmsg)) {
+    if (validate_register(reg, errmsg)) {
         return -1;
     }
 
@@ -566,15 +565,14 @@ int get_register(udi_arch_e arch,
     return 0;
 }
 
-int set_register(udi_arch_e arch,
-                 udi_register_e reg,
+int set_register(udi_register_e reg,
                  udi_errmsg *errmsg,
                  uint64_t value,
                  void *context)
 {
     ucontext_t *u_context = (ucontext_t *)context;
 
-    if (validate_register(arch, reg, errmsg)) {
+    if (validate_register(reg, errmsg)) {
         return -1;
     }
 

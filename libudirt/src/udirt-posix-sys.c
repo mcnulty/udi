@@ -174,11 +174,6 @@ int install_event_breakpoints(udi_errmsg *errmsg) {
             errnum = -1;
             break;
         }
-
-        if (get_multithread_capable()) {
-            errnum = install_thread_event_breakpoints(errmsg);
-        }
-
     }while(0);
 
     return errnum;
@@ -363,7 +358,7 @@ int is_event_breakpoint(breakpoint *bp) {
         return 1;
     }
 
-    return is_thread_event_breakpoint(bp);
+    return 0;
 }
 
 int handle_event_breakpoint(breakpoint *bp, const void *in_context, udi_errmsg *errmsg) {
@@ -374,8 +369,7 @@ int handle_event_breakpoint(breakpoint *bp, const void *in_context, udi_errmsg *
         return handle_exit_breakpoint(context, errmsg);
     }
 
-
-    return handle_thread_event_breakpoint(bp, context, errmsg);
+    return RESULT_ERROR;
 }
 
 

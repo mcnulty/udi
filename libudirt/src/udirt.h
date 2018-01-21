@@ -84,12 +84,41 @@ typedef struct thread_struct thread;
 typedef struct breakpoint_struct breakpoint;
 
 uint64_t get_user_thread_id();
+
+/**
+ * @return The number of threads in this process
+ */
 int get_num_threads();
+
+/**
+ * Determine if the debuggee is multithread capable (i.e., linked against the threading library)
+ *
+ * @return non-zero if the debuggee is multithread capable
+ */
 int get_multithread_capable();
+
+/**
+ * Determine if the debuggee is multithreaded
+ *
+ * @return non-zero if the debuggee is multithread capable
+ */
 int get_multithreaded();
+
+/**
+ * @return the head of the thread list
+ */
 thread *get_thread_list();
+
+/**
+ * @return the next thread in the thread list or NULL if the `thr` is the last
+ */
 thread *get_next_thread(thread *thr);
+
+/**
+ * @return the current thread
+ */
 thread *get_current_thread();
+
 int is_thread_dead(thread *thr);
 udi_thread_state_e get_thread_state(thread *thr);
 void set_thread_state(thread *thr, udi_thread_state_e state);
@@ -101,6 +130,14 @@ void set_single_step(thread *thr, int single_step);
 breakpoint *get_single_step_breakpoint(thread *thr);
 void set_single_step_breakpoint(thread *thr, breakpoint *bp);
 
+/**
+ * Called before the process is continued after a thread death event was published
+ *
+ * @param thr the thread structure for the dead thread
+ * @param errmsg the error message
+ *
+ * @return 0 on success; non-zero on failure
+ */
 int thread_death_handshake(thread *thr, udi_errmsg *errmsg);
 
 // request handling

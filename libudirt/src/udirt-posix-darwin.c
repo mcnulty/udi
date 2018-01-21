@@ -14,21 +14,6 @@
 
 #include "udirt-posix.h"
 
-void (*pthreads_create_event)(void) = NULL;
-void (*pthreads_death_event)(void) = NULL;
-
-uint64_t finalize_thread(udi_errmsg *errmsg) {
-    return get_user_thread_id();
-}
-
-int initialize_pthreads_support(udi_errmsg *errmsg) {
-    return 0;
-}
-
 uint64_t get_kernel_thread_id() {
     return (uint64_t)syscall(SYS_thread_selfid);
-}
-
-uint64_t initialize_thread(udi_errmsg *errmsg) {
-    return -1;
 }

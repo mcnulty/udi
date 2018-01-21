@@ -36,8 +36,17 @@ extern fork_type real_fork;
 extern execve_type real_execve;
 
 int locate_wrapper_functions(udi_errmsg *errmsg);
+int locate_thread_wrapper_functions(udi_errmsg *errmsg);
 int install_event_breakpoints(udi_errmsg *errmsg);
 
+/**
+ * Wait for and request and process the request on reception.
+ *
+ * @param errmsg error message populate on error
+ * @param thr populated by the thread that received the command
+ *
+ * @return request handler return code
+ */
 int wait_and_execute_command(udi_errmsg *errmsg, thread **thr);
 
 // re-initialize a process after fork
@@ -104,7 +113,6 @@ extern int THREAD_SUSPEND_SIGNAL;
 struct thread_struct {
     uint64_t id;
     udi_thread_state_e ts;
-    int alive;
     int dead;
     int request_handle;
     int response_handle;
@@ -131,53 +139,96 @@ typedef struct udi_barrier_struct {
     int read_handle;
     int write_handle;
 } udi_barrier;
-int initialize_thread_sync();
-int block_other_threads();
-int release_other_threads();
-
-// thread events
-extern void (*pthreads_create_event)(void);
-extern void (*pthreads_death_event)(void);
 
 /**
- * Initializes pthreads support
- *
- * @param errmsg the errmsg populated on error
+ * Initializes the thread synchronization mechanism
  *
  * @return 0 on success; non-zero on failure
  */
-int initialize_pthreads_support(udi_errmsg *errmsg);
+int initialize_thread_sync();
 
-int install_thread_event_breakpoints(udi_errmsg *errmsg);
-int is_thread_event_breakpoint(breakpoint *bp);
-int handle_thread_event_breakpoint(breakpoint *bp,
-                                   const ucontext_t *context,
-                                   udi_errmsg *errmsg);
+/**
+ * Barrier used to synchronize actions with other threads
+ */
+extern udi_barrier thread_barrier;
 
+/**
+ * Value used as signal with thread_barrier and thread control pipe
+ */
+extern const unsigned char sentinel;
+
+/**
+ * The first thread that calls this function forces all other threads into the UDI signal handler,
+ * which eventually routes to this function.
+ *
+ * If a thread isn't the first thread calling this function, it will block until the library
+ * decides the thread should continue executing, which is a combination of the user's desired
+ * run state for a thread and the library's desired run state for a thread.
+ *
+ * @return less than 0 if there is an error
+ * @return 0 if the thread was the first thread or the thread should handle its event now
+ * @return greater than 0 if the thread was not the first thread
+ */
+int block_other_threads();
+
+/**
+ * Releases the other threads that are blocked in block_other_threads
+ *
+ * Marks any threads that were created during this request handling
+ *
+ * @return 0 on success
+ * @return non-zero on failure
+ */
+int release_other_threads();
+
+/**
+ * @return non-zero if a single thread will be executing due to a library operation (such as
+ * a memory access to a non-accessible address or a single-step event)
+ */
+int single_thread_executing();
+
+/**
+ * Creates the initial thread
+ *
+ * @return the created thread or null if there was an error
+ */
 thread *create_initial_thread();
+
+/**
+ * Called by the thread support implementation
+ *
+ * @param thr the thread structure for the created thread
+ * @param errmsg the error message
+ *
+ * @return 0 on success; non-zero on failure
+ */
 int thread_create_callback(thread *thr, udi_errmsg *errmsg);
+
+/**
+ * Performs the handshake with the debugger after the creation of the thread files
+ *
+ * @param thr the thread structure for the created thread
+ * @param errmsg the error message
+ *
+ * @return 0 on success; non-zero on failure
+ */
 int thread_create_handshake(thread *thr, udi_errmsg *errmsg);
 
 /**
- * Initializes the newly created thread
+ * Called by the thread support implementation before thread event is published
  *
- * @param errmsg the error message (populated on error)
+ * @param thr the thread structure for the dead thread
+ * @param errmsg the error message
  *
- * @return the tid on success; 0 on failure
+ * @return 0 on success; non-zero on failure
  */
-uint64_t initialize_thread(udi_errmsg *errmsg);
-
 int thread_death_callback(thread *thr, udi_errmsg *errmsg);
 
 /**
- * Determines the thread that is in the process of being finalized
+ * Destroys the specified thread structure
  *
- * @param errmsg the error message
- *
- * @return the tid for the finalized thread, 0 on error
+ * @param thr the thread
  */
-uint64_t finalize_thread(udi_errmsg *errmsg);
-
 void destroy_thread(thread *thr);
 
 #ifdef __cplusplus
