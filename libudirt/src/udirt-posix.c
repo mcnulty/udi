@@ -162,8 +162,9 @@ void *pre_mem_access_hook() {
 
         sigset_t segv_set = *original_set;
         sigdelset(&segv_set, SIGSEGV);
+        sigdelset(&segv_set, SIGBUS);
         if ( setsigmask(SIG_SETMASK, &segv_set, original_set) != 0 ) {
-            udi_printf("failed to unblock SIGSEGV: %s\n", strerror(errno));
+            udi_printf("failed to unblock fault signals: %s\n", strerror(errno));
             result = -1;
             break;
         }
@@ -366,6 +367,10 @@ static int decode_segv(const siginfo_t *siginfo,
         result = RESULT_SUCCESS;
     }else{
         // TODO create event and send to debugger
+        udi_printf("segv at address 0x%lx, pc = 0x%"PRIx64"\n",
+                   (unsigned long)siginfo->si_addr,
+                   get_pc(context));
+
         result = RESULT_SUCCESS;
     }
 
@@ -398,7 +403,11 @@ int decode_trap(thread *thr,
         result = decode_breakpoint(thr, bp, context, wait_for_request, errmsg);
     }else{
         // TODO create signal event
-        snprintf(errmsg->msg, errmsg->size, "Failed to decode trap event at 0x%"PRIx64, trap_address);
+        snprintf(errmsg->msg,
+                 errmsg->size,
+                 "failed to decode trap event at 0x%"PRIx64,
+                 trap_address);
+        udi_abort(__FILE__, __LINE__);
         result = RESULT_ERROR;
         *wait_for_request = 0;
     }
@@ -500,6 +509,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
     int result;
     do {
         switch(signal) {
+            case SIGBUS:
             case SIGSEGV:
                 result = decode_segv(siginfo, context, &wait_for_request, &errmsg);
                 break;
@@ -1361,10 +1371,12 @@ void init_udirt() {
             break;
         }
 
-        if ( setup_signal_handlers() != 0 ) {
+        int signal_result = setup_signal_handlers();
+        if ( signal_result != 0 ) {
             snprintf(errmsg.msg,
                      errmsg.size,
-                     "failed to setup signal handlers");
+                     "failed to setup signal handlers: %s",
+                     strerror(signal_result));
             result = RESULT_ERROR;
             break;
         }
@@ -1398,10 +1410,10 @@ void init_udirt() {
     if (result != RESULT_SUCCESS ) {
         udi_enabled = 0;
 
-        udi_printf("Initialization failed: %s\n", errmsg.msg);
+        udi_printf("initialization failed: %s\n", errmsg.msg);
         udi_abort(__FILE__, __LINE__);
     }else{
-        udi_printf("%s\n", "Initialization completed");
+        udi_printf("initialization completed\n");
     }
 
     // Explicitly ignore errors

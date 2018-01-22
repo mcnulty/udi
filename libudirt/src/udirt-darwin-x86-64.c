@@ -26,7 +26,6 @@ void rewind_pc(void *in_context) {
     context->uc_mcontext->__ss.__rip--;
 }
 
-
 void set_pc(ucontext_t *context, unsigned long pc) {
     context->uc_mcontext->__ss.__rip = pc;
 }
@@ -46,7 +45,7 @@ uint64_t get_flags(const void *context) {
 
 uint64_t get_trap_address(const ucontext_t *context) {
 
-    return context->uc_mcontext->__ss.__rip;
+    return context->uc_mcontext->__ss.__rip - 1;
 }
 
 int get_exit_argument(const ucontext_t *context,

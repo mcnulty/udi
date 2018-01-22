@@ -38,7 +38,7 @@ typedef int udirt_fd;
 #if defined(DARWIN)
 
 #define UDI_CONSTRUCTOR __attribute__((constructor))
-#define UDI_WEAK __attribute__((weak_import))
+#define UDI_WEAK __attribute__((weak))
 #define _DARWIN_C_SOURCE 1
 
 #endif /* DARWIN */

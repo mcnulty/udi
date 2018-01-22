@@ -74,7 +74,7 @@ int is_performing_mem_access() {
  *
  * @see memcpy
  */
-static 
+static
 int abortable_memcpy(void *dest, const void *src, size_t n) {
     // This should stop the compiler from messing with the label
     static void *abort_label_addr = &&abort_label;

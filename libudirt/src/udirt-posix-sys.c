@@ -446,9 +446,13 @@ int setup_signal_handlers() {
 
     int errnum = 0;
     for(i = 0; i < NUM_SIGNALS; ++i) {
-        if ( real_sigaction(signals[i], &default_lib_action, &(app_actions[i].action)) != 0 ) {
-            errnum = errno;
-            break;
+        int signum = signals[i];
+        if (signum != 0) {
+            if ( real_sigaction(signum, &default_lib_action, &(app_actions[i].action)) != 0 ) {
+                udi_printf("failed to register handler for %d\n", signals[i]);
+                errnum = errno;
+                break;
+            }
         }
     }
 
