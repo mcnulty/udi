@@ -204,6 +204,15 @@ void rewind_pc(void *in_context) {
     }
 }
 
+int allocate_context_data(void **context_data) {
+    *context_data = NULL;
+    return 0;
+}
+
+void copy_context(const ucontext_t *src, signal_state *dst) {
+    dst->context = *src;
+}
+
 void set_pc(ucontext_t *context, unsigned long pc) {
     if (__WORDSIZE == 64) {
         context->uc_mcontext.gregs[X86_64_RIP_OFFSET] = pc;

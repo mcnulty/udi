@@ -45,7 +45,9 @@ pub fn wait_for_events(procs: &Vec<Arc<Mutex<Process>>>) -> Result<Vec<Event>> {
 
             let event_source = sys::EventSource::new(&file_context.events_file);
 
-            poll.register(&event_source, token, Ready::readable(), PollOpt::edge())?;
+            let ready = sys::add_platform_ready_flags(Ready::readable());
+
+            poll.register(&event_source, token, ready, PollOpt::level())?;
         }
 
         event_procs.insert(token, proc_ref.clone());
@@ -165,6 +167,10 @@ mod sys {
     pub fn is_event_source_failed(ready: Ready) -> bool {
         let unix_ready = UnixReady::from(ready);
         unix_ready.is_hup() || unix_ready.is_error()
+    }
+
+    pub fn add_platform_ready_flags(ready: Ready) -> Ready {
+        ready | UnixReady::hup() | UnixReady::error()
     }
 
     pub struct EventSource {

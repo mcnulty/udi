@@ -106,8 +106,10 @@ typedef struct signal_state_struct {
     int signal;
     siginfo_t siginfo;
     ucontext_t context;
+    void *context_data;
     int context_valid;
 } signal_state;
+
 extern int THREAD_SUSPEND_SIGNAL;
 
 struct thread_struct {
@@ -127,6 +129,23 @@ struct thread_struct {
 };
 
 int setsigmask(int how, const sigset_t *new_set, sigset_t *old_set);
+
+/**
+ * Allocate the platform-specific context data
+ *
+ * @param context_data output parameter
+ *
+ * @return 0 on success; non-zero on failure
+ */
+int allocate_context_data(void **context_data);
+
+/**
+ * Copy the source ucontext_t to the target signal state
+ *
+ * @param src the source
+ * @param dst the destination
+ */
+void copy_context(const ucontext_t *src, signal_state *dst);
 
 /**
  * @return the kernel thread id for the currently executing thread

@@ -14,16 +14,38 @@
 
 #include <ucontext.h>
 #include <inttypes.h>
+#include <errno.h>
 
 #include "udi.h"
 #include "udirt.h"
 #include "udirt-posix.h"
 #include "udirt-x86.h"
 
+typedef struct __darwin_mcontext64 reg_data;
+
 void rewind_pc(void *in_context) {
     ucontext_t *context = (ucontext_t *)in_context;
 
     context->uc_mcontext->__ss.__rip--;
+}
+
+int allocate_context_data(void **context_data) {
+    reg_data *data = (reg_data *) udi_malloc(sizeof(reg_data));
+    if (data == NULL) {
+        *context_data = NULL;
+        return ENOMEM;
+    }
+
+    *context_data = data;
+    return 0;
+}
+
+void copy_context(const ucontext_t *src, signal_state *dst) {
+    dst->context = *src;
+
+    reg_data *data = (reg_data *)dst->context_data;
+    *data = *(dst->context.uc_mcontext);
+    dst->context.uc_mcontext = data;
 }
 
 void set_pc(ucontext_t *context, unsigned long pc) {

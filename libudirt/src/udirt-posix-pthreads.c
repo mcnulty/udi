@@ -135,6 +135,10 @@ thread *create_thread_struct(uint64_t tid) {
         return NULL;
     }
 
+    if ( allocate_context_data(&(new_thr->event_state.context_data)) != 0 ) {
+        return NULL;
+    }
+
     new_thr->id = tid;
     new_thr->dead = 0;
     new_thr->request_handle = -1;
@@ -389,11 +393,13 @@ void *wrapped_start_routine(void *arg)
         report_thread_death();
     }while(0);
 
+    udi_free(context);
+
     return ret_value;
 }
 
 static
-int handshake_with_thread(struct wrapped_thread_context *context)
+int handshake_with_thread()
 {
     udi_errmsg errmsg;
     errmsg.size = ERRMSG_SIZE;
@@ -449,7 +455,7 @@ int pthread_create(pthread_t *thread,
 
     int create_result = real_pthread_create(thread, attr, wrapped_start_routine, context);
     if (create_result == 0) {
-        int handshake_result = handshake_with_thread(context);
+        int handshake_result = handshake_with_thread();
         if (handshake_result != RESULT_SUCCESS) {
             return ENOMEM;
         }
@@ -488,6 +494,7 @@ void destroy_thread(thread *thr) {
     close(iter->control_write);
     close(iter->control_read);
 
+    udi_free(iter->event_state.context_data);
     udi_free(iter);
     num_threads--;
 }

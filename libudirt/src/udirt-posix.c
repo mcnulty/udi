@@ -447,10 +447,11 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
         return;
     }
 
-    udi_printf(">>> signal entry for 0x%"PRIx64"/0x%"PRIx64" with %d\n",
-            get_user_thread_id(),
-            get_kernel_thread_id(),
-            signal);
+    udi_printf(">>> signal entry for 0x%"PRIx64"/0x%"PRIx64" with %d at 0x%"PRIx64"\n",
+               get_user_thread_id(),
+               get_kernel_thread_id(),
+               signal,
+               get_pc(context));
     if ( is_performing_mem_access() ) {
         udi_printf("memory access at 0x%lx in progress\n", (unsigned long)get_mem_access_addr());
     }
@@ -471,7 +472,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
         // thread later on
         thr->event_state.signal = signal;
         thr->event_state.siginfo = *siginfo;
-        thr->event_state.context = *context;
+        copy_context(context, &(thr->event_state));
         thr->event_state.context_valid = 1;
 
         int block_result = block_other_threads();
@@ -489,7 +490,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
         }
     }else if (continue_bp != NULL) {
         if (thr != NULL ) {
-            thr->event_state.context = *context;
+            copy_context(context, &(thr->event_state));
             thr->event_state.context_valid = 1;
         }
     }
@@ -590,13 +591,14 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
         }
     }
 
-    udi_printf("<<< signal exit for 0x%"PRIx64"/0x%"PRIx64" with %d\n",
-            get_user_thread_id(),
-            get_kernel_thread_id(),
-            signal);
+    udi_printf("<<< signal exit for 0x%"PRIx64"/0x%"PRIx64" with %d at 0x%"PRIx64"\n",
+               get_user_thread_id(),
+               get_kernel_thread_id(),
+               signal,
+               get_pc(context));
 
     if (thr != NULL) {
-        memset(&(thr->event_state), 0, sizeof(signal_state));
+        thr->event_state.context_valid = 0;
     }
 }
 

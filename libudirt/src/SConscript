@@ -24,7 +24,7 @@ if udibuild.IsX86():
     libs.append('udis86')
 
 if udibuild.IsLinux():
-    sources.append('udirt-posix-linux-gnu.c')
+    sources.append('udirt-posix-linux.c')
     libs.append('dl')
 
     if udibuild.IsX86():
