@@ -91,6 +91,7 @@ int locate_thread_wrapper_functions(udi_errmsg *errmsg) {
             errnum = -1;
             break;
         }
+        udi_printf("real pthread create at 0x%"PRIx64"\n", (uint64_t)real_pthread_create);
 
         real_pthread_exit = (pthread_exit_type) dlsym(UDI_RTLD_NEXT, "pthread_exit");
         errmsg_tmp = dlerror();
@@ -100,6 +101,8 @@ int locate_thread_wrapper_functions(udi_errmsg *errmsg) {
             errnum = -1;
             break;
         }
+
+        udi_printf("real pthread exit at 0x%"PRIx64"\n", (uint64_t)real_pthread_exit);
     }while(0);
 
     return errnum;
@@ -267,11 +270,23 @@ int handle_thread_create(uint64_t creator_thr)
         }
 
         unsigned char trigger = 0;
-        if ( read(thr->control_read, &trigger, 1) != 1 ) {
-            udi_printf("failed to read control trigger from pipe: %s\n", strerror(errno));
-            result = RESULT_ERROR;
+        while (trigger == 0) {
+            int trigger_read_result = read(thr->control_read, &trigger, 1);
+            if (trigger_read_result == -1) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                udi_printf("failed to read control trigger from pipe: %s\n", strerror(errno));
+                result = RESULT_ERROR;
+                break;
+            }
+            result = RESULT_SUCCESS;
+        }
+        if (result != RESULT_SUCCESS) {
             break;
-        } else if ( trigger != sentinel ) {
+        }
+
+        if ( trigger != sentinel ) {
             udi_abort(__FILE__, __LINE__);
         }
     }while(0);

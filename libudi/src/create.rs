@@ -301,6 +301,8 @@ fn create_environment(envp: &Vec<String>,
 
     output.push((UDI_ROOT_DIR_ENV.to_owned(), root_dir.to_owned()));
 
+    sys::modify_env(&mut output);
+
     output
 }
 
@@ -309,11 +311,18 @@ mod sys {
     pub fn get_dyn_linker_var_name() -> &'static str {
         "LD_PRELOAD"
     }
+
+    pub fn modify_env(env: &mut Vec<(String, String)>) {
+    }
 }
 
 #[cfg(target_os = "macos")]
 mod sys {
     pub fn get_dyn_linker_var_name() -> &'static str {
         "DYLD_INSERT_LIBRARIES"
+    }
+
+    pub fn modify_env(env: &mut Vec<(String, String)>) {
+        env.push(("DYLD_FORCE_FLAT_NAMESPACE".to_owned(), "1".to_owned()));
     }
 }

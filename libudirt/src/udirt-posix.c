@@ -144,7 +144,7 @@ void post_continue_hook(uint32_t sig_val) {
  * @return the original signal set before SIGSEGV unblocked
  */
 void *pre_mem_access_hook() {
-    // Unblock the SIGSEGV to allow the write to complete
+    // Unblock the some signals to allow the write to complete
     sigset_t *original_set = (sigset_t *)udi_malloc(sizeof(sigset_t));
 
     if ( original_set == NULL ) {
@@ -307,18 +307,20 @@ int wait_and_execute_command(udi_errmsg *errmsg, thread **thr) {
 }
 
 /**
- * Decodes the SIGSEGV using the specified arguments
+ * Decodes the memory access signal event using the specified arguments
  *
+ * @param sig the signal that caused the event
  * @param siginfo the siginfo argument passed to the signal handler
  * @param context the context argument passed to the signal handler
  * @param errmsg the errmsg populated on error
  *
- * @return the event decoded from the SIGSEGV
+ * @return the result of decoding the event
  */
-static int decode_segv(const siginfo_t *siginfo,
-                       ucontext_t *context,
-                       int *wait_for_request,
-                       udi_errmsg *errmsg)
+static int decode_memory_access_event(int sig,
+                                       const siginfo_t *siginfo,
+                                       ucontext_t *context,
+                                       int *wait_for_request,
+                                       udi_errmsg *errmsg)
 {
     int result;
     if ( is_performing_mem_access() ) {
@@ -339,7 +341,7 @@ static int decode_segv(const siginfo_t *siginfo,
             // portable way to do this. Thus, the tradeoff was made in favor of
             // portability.
             if ( mprotect((void *)mem_access_addr_ul, get_mem_access_size(),
-                        PROT_READ | PROT_WRITE | PROT_EXEC) != 0 ) 
+                        PROT_READ | PROT_WRITE | PROT_EXEC) != 0 )
             {
                 result = RESULT_ERROR;
                 snprintf(errmsg->msg,
@@ -351,9 +353,11 @@ static int decode_segv(const siginfo_t *siginfo,
                 result = RESULT_SUCCESS;
             }
         }else{
-            udi_printf("address 0x%lx not mapped for process %d\n",
+            udi_printf("failed to handle event at address 0x%lx for process %d: sig=%d, si_code=%d\n",
                        (unsigned long)siginfo->si_addr,
-                       getpid());
+                       getpid(),
+                       sig,
+                       siginfo->si_code);
             result = RESULT_ERROR;
         }
 
@@ -483,7 +487,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
         }
 
         if ( block_result > 0 ) {
-            memset(&(thr->event_state), 0, sizeof(signal_state));
+            thr->event_state.context_valid = 0;
 
             udi_printf("<<< waiting thread 0x%"PRIx64" exiting signal handler\n", get_user_thread_id());
             return;
@@ -512,7 +516,11 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
         switch(signal) {
             case SIGBUS:
             case SIGSEGV:
-                result = decode_segv(siginfo, context, &wait_for_request, &errmsg);
+                result = decode_memory_access_event(signal,
+                                                    siginfo,
+                                                    context,
+                                                    &wait_for_request,
+                                                    &errmsg);
                 break;
             case SIGTRAP:
                 result = decode_trap(thr, siginfo, context, &wait_for_request, &errmsg);

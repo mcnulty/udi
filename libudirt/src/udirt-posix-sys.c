@@ -286,8 +286,10 @@ int execve(const char *filename, char *const argv[],
  * by the library.
  */
 int sigaction(int signum, const struct sigaction *act,
-        struct sigaction *oldact)
+              struct sigaction *oldact)
 {
+    udi_printf("wrapped call to sigaction for signal %d\n", signum);
+
     // Block signals while doing this to avoid a race where a signal is delivered
     // while validating the arguments
     sigset_t full_set, orig_set;
@@ -311,7 +313,7 @@ int sigaction(int signum, const struct sigaction *act,
         int found = 0;
         int i;
         for (i = 0; i < NUM_SIGNALS; ++i) {
-            if (i == signum) {
+            if (app_actions[i].signal == signum) {
                 found = 1;
                 if ( oldact != NULL ) {
                     *oldact = app_actions[i].action;
@@ -440,7 +442,7 @@ int setup_signal_handlers() {
     int i;
     for (i = 0; i < NUM_SIGNALS; ++i) {
         memset(&app_actions[i], 0, sizeof(struct app_sigaction));
-        app_actions[i].signal = i;
+        app_actions[i].signal = signals[i];
         app_actions[i].action.sa_handler = SIG_DFL;
     }
 
