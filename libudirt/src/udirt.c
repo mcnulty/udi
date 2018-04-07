@@ -9,9 +9,11 @@
 
 // UDI debuggee implementation common between all platforms
 
+#include <stdarg.h>
 #include <string.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <stdio.h>
 
 #include "udirt.h"
 
@@ -185,8 +187,7 @@ breakpoint *create_breakpoint(uint64_t breakpoint_addr) {
     breakpoint *new_breakpoint = (breakpoint *)udi_malloc(sizeof(breakpoint));
 
     if ( new_breakpoint == NULL ) {
-        udi_printf("failed to allocate memory for breakpoint: %s\n",
-                strerror(errno));
+        udi_log("failed to allocate memory for breakpoint: %e", errno);
         return NULL;
     }
 
@@ -305,9 +306,8 @@ int delete_breakpoint(breakpoint *bp, udi_errmsg *errmsg) {
     }
 
     if ( tmp_breakpoint == NULL || prev_breakpoint == NULL ) {
-        snprintf(errmsg->msg, errmsg->size, "failed to delete breakpoint at %"PRIx64,
-                bp->address);
-        udi_printf("%s\n", errmsg->msg);
+        udi_set_errmsg(errmsg, "failed to delete breakpoint at %a", bp->address);
+        udi_log("%s", errmsg->msg);
         return -1;
     }
 
@@ -491,10 +491,205 @@ int validate_register(udi_register_e reg, udi_errmsg *errmsg) {
     }
 
     if (result != 0) {
-        snprintf(errmsg->msg, errmsg->size, "invalid register %s for architecture %s",
-                register_str(reg), arch_str(arch));
+        udi_set_errmsg(errmsg,
+                       "invalid register %s for architecture %s",
+                       register_str(reg),
+                       arch_str(arch));
     }
 
     return result;
+}
+
+static const char * const LEFT_SQ = "[";
+static const char * const RIGHT_SQ = "]";
+static const char * const COLON = ":";
+static const char * const LF = "\n";
+static const char * const HEX_PREFIX = "0x";
+static const char * const NEG = "-";
+static const char * const SPACE = " ";
+
+typedef void (*format_cb)(void *ctx, const void *data, size_t len);
+
+static
+void write_log(void *ctx, const void *data, size_t len) {
+    write_to(udi_log_fd(), data, len);
+}
+
+static
+void udi_log_integer(format_cb cb, void *ctx, int value) {
+    char buf[10];
+    int sign;
+
+    if (value < 0) {
+        sign = 1;
+        value = -value;
+    } else {
+        sign = 0;
+    }
+
+    int i = 0;
+    do {
+        buf[i] = (value % 10) + '0';
+
+        i++;
+        value = value / 10;
+    }while (i < 10 && value > 0);
+
+    if (sign) {
+        cb(ctx, NEG, 1);
+    }
+
+    for (int j = i-1; j >= 0; j--) {
+        cb(ctx, buf + j, 1);
+    }
+}
+
+static
+void udi_log_nibble(format_cb cb, void *ctx, uint8_t nibble) {
+    char digit;
+    if (nibble < 10) {
+        digit = nibble + '0';
+    } else {
+        digit = (nibble - 10) + 'a';
+    }
+    cb(ctx, &digit, 1);
+}
+
+static
+void udi_log_byte(format_cb cb, void *ctx, uint8_t byte) {
+    udi_log_nibble(cb, ctx, (byte & 0xf0) >> 4);
+    udi_log_nibble(cb, ctx, byte & 0x0f);
+}
+
+static
+void udi_log_address(format_cb cb, void *ctx, uint64_t address) {
+    cb(ctx, HEX_PREFIX, 2);
+    uint8_t shift = 56;
+    while (shift > 0) {
+        udi_log_byte(cb, ctx, (uint8_t)(address >> shift) & 0xff);
+        shift -= 8;
+    }
+    udi_log_byte(cb, ctx, (uint8_t)(address) & 0xff);
+}
+
+static
+void udi_log_string(format_cb cb, void *ctx, const char *string) {
+    size_t len = strlen(string);
+    cb(ctx, string, len);
+}
+
+static
+void udi_log_error(format_cb cb, void *ctx, int error) {
+    char buf[64];
+    memset(buf, 0, 64);
+
+    strerror_r(error, buf, 64);
+
+    udi_log_string(cb, ctx, buf);
+}
+
+static
+void udi_log_size_t(format_cb cb, void *ctx, size_t value) {
+    udi_log_integer(cb, ctx, (int)value);
+}
+
+static
+void udi_log_varargs(format_cb cb, void *ctx, const char *format, va_list args_ptr) {
+
+    for (const char *format_ptr = format; *format_ptr; format_ptr++) {
+        if (*format_ptr != '%') {
+            cb(ctx, format_ptr, 1);
+            continue;
+        }
+
+        // skip % character
+        format_ptr++;
+
+        switch (*format_ptr) {
+            case 'a':
+                udi_log_address(cb, ctx, va_arg(args_ptr, uint64_t));
+                break;
+            case 'e':
+                udi_log_error(cb, ctx, va_arg(args_ptr, int));
+                break;
+            case 's':
+                udi_log_string(cb, ctx, va_arg(args_ptr, char *));
+                break;
+            case 'd':
+                udi_log_integer(cb, ctx, va_arg(args_ptr, int));
+                break;
+            case 'b':
+                udi_log_byte(cb, ctx, (uint8_t)va_arg(args_ptr, int));
+                break;
+            case 'l':
+                udi_log_size_t(cb, ctx, va_arg(args_ptr, size_t));
+                break;
+            default:
+                cb(ctx, format_ptr, 1);
+                break;
+        }
+    }
+}
+
+void udi_log_formatted(const char *format, const char *file, int line, ...) {
+    va_list args_ptr;
+
+    udi_log_string(write_log, NULL, file);
+    write_log(NULL, LEFT_SQ, 1);
+    udi_log_integer(write_log, NULL, line);
+    write_log(NULL, RIGHT_SQ, 1);
+    write_log(NULL, COLON, 1);
+    write_log(NULL, SPACE, 1);
+
+    va_start(args_ptr, line);
+    udi_log_varargs(write_log, NULL, format, args_ptr);
+    va_end(args_ptr);
+
+    write_log(NULL, LF, 1);
+}
+
+void udi_log_formatted_noprefix(const char *format, ...) {
+    va_list args_ptr;
+
+    va_start(args_ptr, format);
+    udi_log_varargs(write_log, NULL, format, args_ptr);
+    va_end(args_ptr);
+}
+
+struct str_ctx {
+    char *str;
+    size_t size;
+    size_t idx;
+};
+
+static
+void write_string(void *in_ctx, const void *data, size_t len) {
+    struct str_ctx *ctx = (struct str_ctx *)in_ctx;
+
+    size_t copy_len;
+    if (ctx->idx + len > ctx->size) {
+        copy_len = ctx->size - ctx->idx;
+    } else {
+        copy_len = len;
+    }
+
+    if (copy_len > 0) {
+        memcpy(ctx->str + ctx->idx, data, copy_len);
+
+        ctx->idx += copy_len;
+    }
+}
+
+void udi_formatted_str(char *str, size_t size, const char *format, ...) {
+    va_list args_ptr;
+
+    struct str_ctx ctx;
+    ctx.str = str;
+    ctx.size = size;
+    ctx.idx = 0;
+
+    va_start(args_ptr, format);
+    udi_log_varargs(write_string, &ctx, format, args_ptr);
+    va_end(args_ptr);
 }
 

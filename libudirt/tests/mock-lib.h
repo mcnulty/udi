@@ -26,6 +26,8 @@ struct mock_data {
 
 void add_read_data(const uint8_t *data, size_t len);
 const struct mock_data *get_written_data();
+void mock_data_to_buffer(const struct mock_data *data, char *buf, size_t len);
+void reset_mock_data();
 void cleanup_mock_lib();
 
 #endif

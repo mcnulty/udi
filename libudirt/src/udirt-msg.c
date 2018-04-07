@@ -74,9 +74,7 @@ int read_cbor_items(udirt_fd fd,
         if (buflen > maxbuflen) {
             buffer = (uint8_t *)udi_realloc(buffer, buflen);
             if (buffer == NULL) {
-                snprintf(errmsg->msg,
-                         errmsg->size,
-                         "failed to allocate memory");
+                udi_set_errmsg(errmsg, "failed to allocate memory");
                 return ENOMEM;
             }
             maxbuflen = buflen;
@@ -84,17 +82,15 @@ int read_cbor_items(udirt_fd fd,
 
         result = read_from(fd, buffer + buf_idx, buflen - buf_idx);
         if (result < 0) {
-            snprintf(errmsg->msg,
-                     errmsg->size,
-                     "failed to read CBOR data due to unexpected end-of-file");
+            udi_set_errmsg(errmsg,
+                           "failed to read CBOR data due to unexpected end-of-file");
             break;
         }
 
         if (result > 0) {
-            snprintf(errmsg->msg,
-                     errmsg->size,
-                     "failed to read CBOR data: %s",
-                     strerror(errno));
+            udi_set_errmsg(errmsg,
+                           "failed to read CBOR data: %e",
+                           errno);
             break;
         }
         buf_idx = buflen;
@@ -110,7 +106,7 @@ int read_cbor_items(udirt_fd fd,
             case CBOR_DECODER_ERROR:
             {
                 result = -1;
-                snprintf(errmsg->msg, errmsg->size, "failed to decode CBOR data");
+                udi_set_errmsg(errmsg, "failed to decode CBOR data");
                 break;
             }
             case CBOR_DECODER_NEDATA:
@@ -175,8 +171,8 @@ const struct msg_item *check_state(void *ctx, const char *actual_type) {
     if (data_state->current_item == NULL) {
         state->done = 1;
         data_state->error = 1;
-        snprintf(data_state->errmsg->msg, data_state->errmsg->size,
-                 "received unexpected data item of type %s instead of map", actual_type);
+        udi_set_errmsg(data_state->errmsg,
+                       "received unexpected data item of type %s instead of map", actual_type);
         return NULL;
     }
 
@@ -190,9 +186,9 @@ void set_invalid_error(void *ctx, const char *type_name) {
 
     state->done = 1;
     data_state->error = 1;
-    snprintf(data_state->errmsg->msg, data_state->errmsg->size,
-             "received unexpected data item of type %s",
-             type_name);
+    udi_set_errmsg(data_state->errmsg,
+                   "received unexpected data item of type %s",
+                   type_name);
 }
 
 #define DEFINE_VALUE_CALLBACKS(N, T) \
@@ -366,11 +362,10 @@ void request_data_map_start(void *ctx, size_t len) {
     }else{
         if (data_state->config->num_items != len) {
             data_state->error = 1;
-            snprintf(data_state->errmsg->msg,
-                     data_state->errmsg->size,
-                     "Unexpected number of data items in map (expected %d, actual %lu)",
-                     data_state->config->num_items,
-                     len);
+            udi_set_errmsg(data_state->errmsg,
+                           "Unexpected number of data items in map (expected %d, actual %l)",
+                           data_state->config->num_items,
+                           len);
         }
     }
 }
@@ -406,10 +401,9 @@ void request_data_string(void *ctx, cbor_data data, size_t len) {
                 key = "(no memory)";
             }
 
-            snprintf(data_state->errmsg->msg,
-                     data_state->errmsg->size,
-                     "failed to locate config item for %s",
-                     key);
+            udi_set_errmsg(data_state->errmsg,
+                           "failed to locate config item for %s",
+                           key);
         }
     }
 }
@@ -453,21 +447,19 @@ int write_cbor_item(udirt_fd fd,
     size_t length = cbor_serialize_alloc(item, &buffer, &buffer_size);
     cbor_decref(&item);
     if (length == 0) {
-        snprintf(errmsg->msg,
-                 errmsg->size,
-                 "failed to serialize %s",
-                 name);
+        udi_set_errmsg(errmsg,
+                       "failed to serialize %s",
+                       name);
         return RESULT_ERROR;
     }
 
     int result = write_to(fd, buffer, length);
     udi_free(buffer);
     if (result != 0) {
-        snprintf(errmsg->msg,
-                 errmsg->size,
-                 "failed to write %s: %s",
-                 name,
-                 strerror(errno));
+        udi_set_errmsg(errmsg,
+                       "failed to write %s: %e",
+                       name,
+                       errno);
         return RESULT_ERROR;
     }
 
@@ -576,8 +568,8 @@ int continue_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg) {
     }
 
     if (!can_continue) {
-        snprintf(errmsg->msg, errmsg->size,
-                 "cannot continue process, all threads are suspended");
+        udi_set_errmsg(errmsg,
+                       "cannot continue process, all threads are suspended");
         return RESULT_FAILURE;
     }
 
@@ -585,13 +577,13 @@ int continue_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg) {
     if ( continue_bp != NULL ) {
         int install_result = install_breakpoint(continue_bp, errmsg);
         if ( install_result != 0 ) {
-            udi_printf("failed to install breakpoint for continue at 0x%"PRIx64"\n",
-                       continue_bp->address);
+            udi_log("failed to install breakpoint for continue at %a",
+                    continue_bp->address);
             if ( install_result < RESULT_ERROR ) {
                 install_result = RESULT_ERROR;
             }
         }else{
-            udi_printf("installed breakpoint at 0x%"PRIx64" for continue from breakpoint\n",
+            udi_log("installed breakpoint at %a for continue from breakpoint",
                     continue_bp->address);
         }
     }
@@ -672,9 +664,8 @@ int read_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg) {
 
     void *memory_read = udi_malloc(data.len);
     if ( memory_read == NULL ) {
-        snprintf(errmsg->msg,
-                 errmsg->size,
-                 "failed to allocate memory");
+        udi_set_errmsg(errmsg,
+                       "failed to allocate memory");
         return RESULT_ERROR;
     }
 
@@ -684,8 +675,8 @@ int read_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg) {
         udi_free(memory_read);
 
         const char *mem_errstr = get_mem_errstr();
-        snprintf(errmsg->msg, errmsg->size, "%s", mem_errstr);
-        udi_printf("failed memory read: %s\n", mem_errstr);
+        udi_set_errmsg(errmsg, "%s", mem_errstr);
+        udi_log("failed memory read: %s", mem_errstr);
         return RESULT_FAILURE;
     }
 
@@ -771,8 +762,8 @@ int write_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg) {
     udi_free((void *)req.data);
     if ( write_result != 0 ) {
         const char *mem_errstr = get_mem_errstr();
-        snprintf(errmsg->msg, errmsg->size, "%s", mem_errstr);
-        udi_printf("failed write request: %s\n", mem_errstr);
+        udi_set_errmsg(errmsg, "%s", mem_errstr);
+        udi_log("failed write request: %s", mem_errstr);
         return RESULT_FAILURE;
     }
 
@@ -890,19 +881,18 @@ int breakpoint_create_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *err
 
     // A breakpoint already exists
     if ( bp != NULL ) {
-        snprintf(errmsg->msg,
-                 errmsg->size,
-                 "breakpoint already exists at 0x%"PRIx64,
-                 addr);
-        udi_printf("attempt to create duplicate breakpoint at 0x%"PRIx64"\n", addr);
+        udi_set_errmsg(errmsg,
+                       "breakpoint already exists at %a",
+                       addr);
+        udi_log("attempt to create duplicate breakpoint at %a", addr);
         return RESULT_FAILURE;
     }
 
     bp = create_breakpoint(addr);
 
     if ( bp == NULL ) {
-        snprintf(errmsg->msg, errmsg->size, "failed to create breakpoint at 0x%"PRIx64, addr);
-        udi_printf("%s\n", errmsg->msg);
+        udi_set_errmsg(errmsg, "failed to create breakpoint at %a", addr);
+        udi_log("%s", errmsg->msg);
         return RESULT_FAILURE;
     }
 
@@ -921,8 +911,8 @@ int read_breakpoint(udirt_fd req_fd, breakpoint **bp, udi_errmsg *errmsg) {
 
     *bp = find_breakpoint(addr);
     if ( bp == NULL ) {
-        snprintf(errmsg->msg, errmsg->size, "no breakpoint exists at 0x%"PRIx64, addr);
-        udi_printf("%s\n", errmsg->msg);
+        udi_set_errmsg(errmsg, "no breakpoint exists at %a", addr);
+        udi_log("%s", errmsg->msg);
         return RESULT_FAILURE;
     }
 
@@ -982,7 +972,7 @@ int breakpoint_delete_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *err
 
 static
 int invalid_handler(udirt_fd req_fd, udirt_fd resp_fd, udi_errmsg *errmsg) {
-    snprintf(errmsg->msg, errmsg->size, "invalid request for process");
+    udi_set_errmsg(errmsg, "invalid request for process");
     return RESULT_ERROR;
 }
 
@@ -1063,8 +1053,8 @@ int write_error_response(udirt_fd resp_fd, udi_request_type_e req_type, udi_errm
 
     int result = write_response(resp_fd, UDI_RESP_ERROR, req_type, map, &local_errmsg);
     if (result != RESULT_SUCCESS) {
-        udi_printf("failed to write error response: %s\n",
-                   local_errmsg.msg);
+        udi_log("failed to write error response: %s",
+                local_errmsg.msg);
     }
 
     return result;
@@ -1148,10 +1138,9 @@ int perform_init_handshake(udirt_fd req_fd,
         }
 
         if (type != UDI_REQ_INIT) {
-            snprintf(errmsg->msg,
-                     errmsg->size,
-                     "received invalid request type(%s) as init request",
-                     request_type_str(type));
+            udi_set_errmsg(errmsg,
+                           "received invalid request type(%s) as init request",
+                           request_type_str(type));
             write_error_response(resp_fd, type, errmsg);
             result = RESULT_ERROR;
         } else {
@@ -1206,8 +1195,8 @@ int read_register_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_er
     }
 
     if (!is_thread_context_valid(thr)) {
-        snprintf(errmsg->msg, errmsg->size, "%s", "register context is unavailable");
-        udi_printf("%s\n", errmsg->msg);
+        udi_set_errmsg(errmsg, "%s", "register context is unavailable");
+        udi_log("%s", errmsg->msg);
         return RESULT_FAILURE;
     }
 
@@ -1304,8 +1293,8 @@ int write_register_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_e
     }
 
     if (!is_thread_context_valid(thr)) {
-        snprintf(errmsg->msg, errmsg->size, "%s", "register context is unavailable");
-        udi_printf("%s\n", errmsg->msg);
+        udi_set_errmsg(errmsg, "%s", "register context is unavailable");
+        udi_log("%s", errmsg->msg);
         return RESULT_FAILURE;
     }
 
@@ -1342,8 +1331,8 @@ static
 int next_instr_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg) {
 
     if (!is_thread_context_valid(thr)) {
-        snprintf(errmsg->msg, errmsg->size, "register context unavailable");
-        udi_printf("%s\n", errmsg->msg);
+        udi_set_errmsg(errmsg, "register context unavailable");
+        udi_log("%s", errmsg->msg);
         return RESULT_FAILURE;
     }
 
@@ -1352,10 +1341,9 @@ int next_instr_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errms
     uint64_t pc = get_pc(context);
     uint64_t address = get_ctf_successor(pc, errmsg, context);
     if (address == 0) {
-        snprintf(errmsg->msg,
-                 errmsg->size,
-                "failed to determine successor instruction from 0x%"PRIx64, pc);
-        udi_printf("%s\n", errmsg->msg);
+        udi_set_errmsg(errmsg,
+                       "failed to determine successor instruction from %a", pc);
+        udi_log("%s", errmsg->msg);
         return RESULT_FAILURE;
     }
 
@@ -1371,7 +1359,7 @@ int next_instr_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errms
 
 static
 int thr_suspend_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg) {
-    udi_printf("suspended thread 0x%"PRIx64"\n", get_thread_id(thr));
+    udi_log("suspended thread %a", get_thread_id(thr));
     set_thread_state(thr, UDI_TS_SUSPENDED);
 
     return write_response_no_data(resp_fd, UDI_RESP_VALID, UDI_REQ_THREAD_SUSPEND, errmsg);
@@ -1379,7 +1367,7 @@ int thr_suspend_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errm
 
 static
 int thr_resume_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg) {
-    udi_printf("resume thread 0x%"PRIx64"\n", get_thread_id(thr));
+    udi_log("resume thread %a", get_thread_id(thr));
     set_thread_state(thr, UDI_TS_RUNNING);
 
     return write_response_no_data(resp_fd, UDI_RESP_VALID, UDI_REQ_THREAD_RESUME, errmsg);
@@ -1429,8 +1417,8 @@ int single_step_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errm
     breakpoint *single_step_bp = get_single_step_breakpoint(thr);
     if ( !req.setting && single_step_bp != NULL) {
         if ( delete_breakpoint(single_step_bp, errmsg) ) {
-            udi_printf("failed to delete existing single step breakpoint: %s\n",
-                       errmsg->msg);
+            udi_log("failed to delete existing single step breakpoint: %s",
+                    errmsg->msg);
             return RESULT_FAILURE;
         }
         set_single_step_breakpoint(thr, NULL);
@@ -1447,7 +1435,7 @@ int single_step_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errm
 }
 
 int thr_invalid_handler(udirt_fd req_fd, udirt_fd resp_fd, thread *thr, udi_errmsg *errmsg) {
-    snprintf(errmsg->msg, errmsg->size, "invalid request for thread");
+    udi_set_errmsg(errmsg, "invalid request for thread");
     return RESULT_ERROR;
 }
 
@@ -1551,14 +1539,13 @@ int decode_breakpoint(thread *thr,
 
     // Handle single step breakpoints
     if (thr != NULL && get_single_step_breakpoint(thr) == bp) {
-        udi_printf("single step breakpoint at 0x%"PRIx64"\n", bp->address);
+        udi_log("single step breakpoint at %a", bp->address);
 
         int delete_result = delete_breakpoint(bp, errmsg);
         if (delete_result != 0) {
-            snprintf(errmsg->msg,
-                     errmsg->size,
-                     "failed to delete breakpoint at 0x%"PRIx64,
-                     bp->address);
+            udi_set_errmsg(errmsg,
+                           "failed to delete breakpoint at %a",
+                           bp->address);
             return RESULT_ERROR;
         }
 
@@ -1576,19 +1563,19 @@ int decode_breakpoint(thread *thr,
     // that a breakpoint continue will be required after the next continue
     int remove_result = remove_breakpoint_for_continue(bp, errmsg);
     if ( remove_result != 0 ) {
-        udi_printf("failed to remove breakpoint at 0x%"PRIx64"\n", bp->address);
+        udi_log("failed to remove breakpoint at %a", bp->address);
         return RESULT_ERROR;
     }
 
     if ( continue_bp == bp ) {
-        udi_printf("continue breakpoint at 0x%"PRIx64"\n", bp->address);
+        udi_log("continue breakpoint at %a", bp->address);
 
         *wait_for_request = 0;
         continue_bp = NULL;
 
         int delete_result = delete_breakpoint(bp, errmsg);
         if ( delete_result != 0 ) {
-            udi_printf("failed to delete breakpoint at 0x%"PRIx64"\n", bp->address);
+            udi_log("failed to delete breakpoint at %a", bp->address);
             result = RESULT_ERROR;
         }
 
@@ -1602,21 +1589,21 @@ int decode_breakpoint(thread *thr,
                 original_bp->in_memory = 0;
                 int install_result = install_breakpoint(original_bp, errmsg);
                 if ( install_result != 0 ) {
-                    udi_printf("failed to install breakpoint at 0x%"PRIx64"\n",
+                    udi_log("failed to install breakpoint at %a",
                                original_bp->address);
                     result = RESULT_ERROR;
                 }else{
-                    udi_printf("re-installed breakpoint at 0x%"PRIx64"\n",
-                               original_bp->address);
+                    udi_log("re-installed breakpoint at %a",
+                            original_bp->address);
                 }
             }
         }else{
-            udi_printf("Not re-installing breakpoint at 0x%"PRIx64"\n", last_bp_address);
+            udi_log("Not re-installing breakpoint at %a", last_bp_address);
         }
 
         // Need to report single step event if this continue_bp was used for single stepping
         if (result == RESULT_SUCCESS && thr != NULL && is_single_step(thr)) {
-            udi_printf("%s\n", "Using continue breakpoint as single step breakpoint");
+            udi_log("Using continue breakpoint as single step breakpoint");
             result = write_event_no_data(events_handle,
                                          UDI_EVENT_SINGLE_STEP,
                                          get_thread_id(thr),
@@ -1629,34 +1616,34 @@ int decode_breakpoint(thread *thr,
 
     uint64_t successor = get_ctf_successor(bp->address, errmsg, context);
     if (successor == 0) {
-        udi_printf("failed to determine successor for instruction at 0x%"PRIx64"\n", bp->address);
+        udi_log("failed to determine successor for instruction at %a", bp->address);
         return RESULT_ERROR;
     }
 
     continue_bp = create_breakpoint(successor);
     if (continue_bp == NULL) {
-        udi_printf("%s\n", "failed to create continue breakpoint");
+        udi_log("failed to create continue breakpoint");
         return RESULT_ERROR;
     }
 
     last_bp_address = bp->address;
 
     if ( is_event_breakpoint(bp) ) {
-        udi_printf("handling event breakpoint at 0x%"PRIx64"\n", bp->address);
+        udi_log("handling event breakpoint at %a", bp->address);
         return handle_event_breakpoint(bp, context, errmsg);
     }
 
     // Handle the case where this thread hit another thread-specific breakpoint
     // The thread should just be continued silently
     if ( bp->thread != NULL && bp->thread != thr ) {
-        udi_printf("thread 0x%"PRIx64" hit breakpoint for thread 0x%"PRIx64"\n",
-                   get_thread_id(bp->thread),
-                   get_thread_id(thr));
+        udi_log("thread %a hit breakpoint for thread %a",
+                get_thread_id(bp->thread),
+                get_thread_id(thr));
         *wait_for_request = 0;
         return RESULT_ERROR;
     }
 
-    udi_printf("user breakpoint at 0x%"PRIx64"\n", bp->address);
+    udi_log("user breakpoint at %a", bp->address);
 
     cbor_item_t *map = cbor_new_definite_map(1);
 
@@ -1671,7 +1658,7 @@ int decode_breakpoint(thread *thr,
                          map,
                          errmsg);
     if (result != RESULT_SUCCESS) {
-        udi_printf("failed to report breakpoint at 0x%"PRIx64"\n", bp->address);
+        udi_log("failed to report breakpoint at %a", bp->address);
     }
 
     return result;

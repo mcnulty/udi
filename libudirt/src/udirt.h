@@ -12,7 +12,7 @@
 #ifndef _UDI_RT_H
 #define _UDI_RT_H 1
 
-#include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 
 #include "udi.h"
@@ -354,19 +354,47 @@ int handle_exit_event(uint64_t tid, int32_t status, udi_errmsg *errmsg);
 
 int handle_fork_event(uint64_t tid, uint32_t pid, udi_errmsg *errmsg);
 
-// logging
-#define udi_printf(format, ...) \
+/**
+ * Signal handler safe formatted output for debugging RT library execution.
+ *
+ * The format string uses the following syntax to describe the formatted output:
+ *
+ * % starts a placeholder. The single character following a % defines the input type and the
+ * output type.
+ *
+ * || placeholder || input type || output ||
+ * |  %a | 64-bit integer | hex representation of integer preceded by 0x |
+ * |  %s | pointer to character string | string representation |
+ * |  %e | 32-bit integer | string representation of errno |
+ * |  %d | 32-bit integer | decimal representation of integer |
+ * |  %b | byte | hex representation of byte |
+ * |  %l | size_t | decimal representation of size_t |
+ *
+ * @param format the format
+ * @param file the file (__FILE__)
+ * @param line the line (__LINE__)
+ */
+void udi_log_formatted(const char *format, const char *file, int line, ...);
+
+void udi_log_formatted_noprefix(const char *format, ...);
+
+udirt_fd udi_log_fd();
+
+void udi_formatted_str(char *str, size_t size, const char *format, ...);
+
+#define udi_set_errmsg(errmsg, ...) udi_formatted_str(errmsg->msg, errmsg->size, ## __VA_ARGS__)
+
+#define udi_log(format, ...) \
     do {\
         if( udi_debug_on ) {\
-            fprintf(stderr, "%s[%d]: " format, __FILE__, __LINE__,\
-                    ## __VA_ARGS__);\
+            udi_log_formatted(format, __FILE__, __LINE__, ## __VA_ARGS__);\
         }\
     }while(0)
 
-#define udi_printf_noprefix(format, ...) \
+#define udi_log_noprefix(format, ...) \
     do {\
         if ( udi_debug_on ) {\
-            fprintf(stderr, format, ## __VA_ARGS__);\
+            udi_log_formatted_noprefix(format, ## __VA_ARGS__);\
         }\
     }while(0)
 

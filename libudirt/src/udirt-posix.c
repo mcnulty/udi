@@ -75,10 +75,10 @@ static void disable_debugging() {
 
     // Replace the library signal handler with the application signal handlers
     if ( uninstall_signal_handlers() ) {
-        udi_printf("failed to uninstall signal handlers\n");
+        udi_log("failed to uninstall signal handlers");
     }
 
-    udi_printf("%s\n", "Disabled debugging");
+    udi_log("Disabled debugging");
 }
 
 int single_thread_executing() {
@@ -89,7 +89,7 @@ int single_thread_executing() {
  * A UDI version of abort that performs some cleanup before calling abort
  */
 void udi_abort(const char *file, unsigned int line) {
-    udi_printf("udi_abort at %s[%d]\n", file, line);
+    udi_log("udi_abort at %s[%d]", file, line);
 
     if ( real_sigaction ) {
         struct sigaction default_action;
@@ -125,37 +125,37 @@ void post_continue_hook(uint32_t sig_val) {
         pass_signal = sig_val;
         kill(getpid(), sig_val);
 
-        udi_printf("continuing with signal %d\n", sig_val);
+        udi_log("continuing with signal %d", sig_val);
     }else{
         int remove_result = remove_udi_filesystem();
         if (remove_result != 0) {
             if (remove_result > 0) {
-                udi_printf("failed to cleanup udi filesystem: %s\n", strerror(remove_result));
+                udi_log("failed to cleanup udi filesystem: %e", remove_result);
             }else{
-                udi_printf("failed to cleanup udi filesystem\n");
+                udi_log("failed to cleanup udi filesystem");
             }
         }
     }
 }
 
 /**
- * Implementation of pre_mem_access hook. Unblocks SIGSEGV.
+ * Implementation of pre_mem_access hook. Unblocks memory access related signals.
  *
- * @return the original signal set before SIGSEGV unblocked
+ * @return the original signal set before the memory signals are blocked.
  */
 void *pre_mem_access_hook() {
-    // Unblock the some signals to allow the write to complete
+    // Unblock some signals to allow the write to complete
     sigset_t *original_set = (sigset_t *)udi_malloc(sizeof(sigset_t));
 
     if ( original_set == NULL ) {
-        udi_printf("failed to allocate sigset_t: %s\n", strerror(errno));
+        udi_log("failed to allocate sigset_t: %e", errno);
         return NULL;
     }
 
     int result = 0;
     do {
         if ( setsigmask(SIG_BLOCK, NULL, original_set) != 0 ) {
-            udi_printf("failed to change signal mask: %s\n", strerror(errno));
+            udi_log("failed to change signal mask: %e", errno);
             result = -1;
             break;
         }
@@ -164,7 +164,7 @@ void *pre_mem_access_hook() {
         sigdelset(&segv_set, SIGSEGV);
         sigdelset(&segv_set, SIGBUS);
         if ( setsigmask(SIG_SETMASK, &segv_set, original_set) != 0 ) {
-            udi_printf("failed to unblock fault signals: %s\n", strerror(errno));
+            udi_log("failed to unblock fault signals: %e", errno);
             result = -1;
             break;
         }
@@ -191,7 +191,7 @@ int post_mem_access_hook(void *hook_arg) {
 
     int result = 0;
     if ( setsigmask(SIG_SETMASK, original_set, NULL) != 0 ) {
-        udi_printf("failed to reset signal mask: %s\n", strerror(errno));
+        udi_log("failed to reset signal mask: %e", errno);
         result = -1;
     }
 
@@ -232,12 +232,12 @@ int block_for_request(thread **thr) {
 
         if ( result == -1 ) {
             if ( errno == EINTR ) {
-                udi_printf("%s\n", "select call interrupted, trying again");
+                udi_log("select call interrupted, trying again");
                 continue;
             }
-            udi_printf("failed to wait for request: %s\n", strerror(errno));
+            udi_log("failed to wait for request: %e", errno);
         }else if ( result == 0 ) {
-            udi_printf("%s\n", "select unexpectedly returned 0");
+            udi_log("select unexpectedly returned 0");
         }else{
             if ( FD_ISSET(request_handle, &changed_set) ) {
                 *thr = NULL;
@@ -263,24 +263,24 @@ int wait_and_execute_command(udi_errmsg *errmsg, thread **thr) {
 
     int more_reqs = 1;
     while(more_reqs) {
-        udi_printf("%s\n", "waiting for request");
+        udi_log("waiting for request");
         result = block_for_request(thr);
         if ( result != 0 ) {
-            snprintf(errmsg->msg, errmsg->size, "%s", "failed to wait for request");
-            udi_printf("%s\n", "failed to wait for request");
+            udi_set_errmsg(errmsg, "failed to wait for request");
+            udi_log("failed to wait for request");
             result = RESULT_ERROR;
             break;
         }
 
         udi_request_type_e type = UDI_REQ_INVALID;
         if ( *thr == NULL ) {
-            udi_printf("%s\n", "received process request");
+            udi_log("received process request");
             result = handle_process_request(request_handle,
                                             response_handle,
                                             &type,
                                             errmsg);
         }else{
-            udi_printf("received request for thread 0x%"PRIx64"\n", (*thr)->id);
+            udi_log("received request for thread %a", (*thr)->id);
             result = handle_thread_request((*thr)->request_handle,
                                            (*thr)->response_handle,
                                            *thr,
@@ -344,20 +344,19 @@ static int decode_memory_access_event(int sig,
                         PROT_READ | PROT_WRITE | PROT_EXEC) != 0 )
             {
                 result = RESULT_ERROR;
-                snprintf(errmsg->msg,
-                         errmsg->size,
-                         "failed to modify permissions for memory access: %s",
-                         strerror(errno));
-                udi_printf("%s\n", errmsg->msg);
+                udi_set_errmsg(errmsg,
+                               "failed to modify permissions for memory access: %e",
+                               errno);
+                udi_log("%s", errmsg->msg);
             } else {
                 result = RESULT_SUCCESS;
             }
         }else{
-            udi_printf("failed to handle event at address 0x%lx for process %d: sig=%d, si_code=%d\n",
-                       (unsigned long)siginfo->si_addr,
-                       getpid(),
-                       sig,
-                       siginfo->si_code);
+            udi_log("failed to handle event at address %a for process %d: sig=%d, si_code=%d",
+                    (uint64_t)siginfo->si_addr,
+                    getpid(),
+                    sig,
+                    siginfo->si_code);
             result = RESULT_ERROR;
         }
 
@@ -371,9 +370,9 @@ static int decode_memory_access_event(int sig,
         result = RESULT_SUCCESS;
     }else{
         // TODO create event and send to debugger
-        udi_printf("segv at address 0x%lx, pc = 0x%"PRIx64"\n",
-                   (unsigned long)siginfo->si_addr,
-                   get_pc(context));
+        udi_log("segv at address %a, pc = %a",
+                (uint64_t)siginfo->si_addr,
+                get_pc(context));
 
         result = RESULT_SUCCESS;
     }
@@ -407,7 +406,7 @@ int decode_trap(thread *thr,
         result = decode_breakpoint(thr, bp, context, wait_for_request, errmsg);
     }else{
         // TODO create signal event
-        snprintf(errmsg->msg,
+        udi_set_errmsg(errmsg->msg,
                  errmsg->size,
                  "failed to decode trap event at 0x%"PRIx64,
                  trap_address);
@@ -662,7 +661,7 @@ static int create_udi_filesystem() {
             break;
         }
 
-        snprintf(basedir_name,
+        udi_set_errmsg(basedir_name,
                  basedir_length,
                  "%s/%d",
                  UDI_ROOT_DIR,
@@ -684,7 +683,7 @@ static int create_udi_filesystem() {
             break;
         }
 
-        snprintf(requestfile_name,
+        udi_set_errmsg(requestfile_name,
                  requestfile_length,
                  "%s/%d/%s",
                  UDI_ROOT_DIR,
@@ -707,7 +706,7 @@ static int create_udi_filesystem() {
             break;
         }
 
-        snprintf(responsefile_name,
+        udi_set_errmsg(responsefile_name,
                  responsefile_length,
                  "%s/%d/%s",
                  UDI_ROOT_DIR,
@@ -730,7 +729,7 @@ static int create_udi_filesystem() {
             break;
         }
 
-        snprintf(eventsfile_name,
+        udi_set_errmsg(eventsfile_name,
                  eventsfile_length,
                  "%s/%d/%s",
                  UDI_ROOT_DIR,
@@ -974,7 +973,7 @@ static
 char *get_thread_dir(thread *thr) {
     char subdir_name[32];
 
-    snprintf(subdir_name, 32, "%"PRIx64, thr->id);
+    udi_set_errmsg(subdir_name, 32, "%"PRIx64, thr->id);
 
     size_t dir_length = strlen(basedir_name) + DS_LEN + strlen(subdir_name) + 1;
     char *thread_dir = (char *)udi_malloc(dir_length);
@@ -983,7 +982,7 @@ char *get_thread_dir(thread *thr) {
         return NULL;
     }
 
-    snprintf(thread_dir, dir_length, "%s/%s", basedir_name, subdir_name);
+    udi_set_errmsg(thread_dir, dir_length, "%s/%s", basedir_name, subdir_name);
     return thread_dir;
 }
 
@@ -1005,7 +1004,7 @@ char *get_thread_file(thread *thr, char *thread_dir, const char *filename) {
         return NULL;
     }
 
-    snprintf(thread_file, file_length, "%s/%s", thread_dir, filename);
+    udi_set_errmsg(thread_file, file_length, "%s/%s", thread_dir, filename);
     return thread_file;
 }
 
@@ -1023,7 +1022,7 @@ int thread_create_callback(thread *thr, udi_errmsg *errmsg) {
         }
 
         if (mkdir(thread_dir, S_IRWXG | S_IRWXU) == -1) {
-            snprintf(errmsg->msg, errmsg->size, "failed to create directory %s: %s", 
+            udi_set_errmsg(errmsg->msg, errmsg->size, "failed to create directory %s: %s", 
                     thread_dir, strerror(errno));
             result = -1;
             break;
@@ -1042,14 +1041,14 @@ int thread_create_callback(thread *thr, udi_errmsg *errmsg) {
         }
 
         if (mkfifo(request_file, S_IRWXG | S_IRWXU) == -1) {
-            snprintf(errmsg->msg, errmsg->size, "failed to create request pipe %s: %s", 
+            udi_set_errmsg(errmsg->msg, errmsg->size, "failed to create request pipe %s: %s", 
                     request_file, strerror(errno));
             result = -1;
             break;
         }
 
         if (mkfifo(response_file, S_IRWXG | S_IRWXU) == -1) {
-            snprintf(errmsg->msg, errmsg->size, "failed to create response pipe %s: %s", 
+            udi_set_errmsg(errmsg->msg, errmsg->size, "failed to create response pipe %s: %s", 
                     response_file, strerror(errno));
             result = -1;
             break;
@@ -1078,7 +1077,7 @@ int thread_create_response_fd_callback(void *ctx, udirt_fd *resp_fd, udi_errmsg 
 
     resp_ctx->thr->response_handle = open(resp_ctx->response_file, O_WRONLY);
     if (resp_ctx->thr->response_handle == -1) {
-        snprintf(errmsg->msg,
+        udi_set_errmsg(errmsg->msg,
                  errmsg->size,
                  "failed to open %s: %s",
                  resp_ctx->response_file,
@@ -1116,7 +1115,7 @@ int thread_create_handshake(thread *thr, udi_errmsg *errmsg) {
 
         thr->request_handle = open(request_file, O_RDONLY);
         if (thr->request_handle == -1) {
-            snprintf(errmsg->msg,
+            udi_set_errmsg(errmsg->msg,
                      errmsg->size,
                      "failed to open %s: %s",
                      request_file,
@@ -1158,7 +1157,7 @@ int thread_death_callback(thread *thr, udi_errmsg *errmsg) {
 
     // close the response file
     if ( close(thr->response_handle) != 0 ) {
-        snprintf(errmsg->msg, errmsg->size, "failed to close response handle for thread 0x%"PRIx64": %s",
+        udi_set_errmsg(errmsg->msg, errmsg->size, "failed to close response handle for thread 0x%"PRIx64": %s",
                 thr->id, strerror(errno));
         udi_printf("%s\n", errmsg->msg);
         return -1;
@@ -1170,7 +1169,7 @@ int thread_death_callback(thread *thr, udi_errmsg *errmsg) {
 int thread_death_handshake(thread *thr, udi_errmsg *errmsg) {
 
     if (!thr->dead) {
-        snprintf(errmsg->msg, errmsg->size, "thread 0x%"PRIx64" is not dead, not completing handshake",
+        udi_set_errmsg(errmsg->msg, errmsg->size, "thread 0x%"PRIx64" is not dead, not completing handshake",
                 thr->id);
         udi_printf("%s\n", errmsg->msg);
         return -1;
@@ -1178,7 +1177,7 @@ int thread_death_handshake(thread *thr, udi_errmsg *errmsg) {
 
     // close the request file
     if ( close(thr->request_handle) != 0 ) {
-        snprintf(errmsg->msg, errmsg->size, "failed to close request handle for thread 0x%"PRIx64": %s",
+        udi_set_errmsg(errmsg->msg, errmsg->size, "failed to close request handle for thread 0x%"PRIx64": %s",
                 thr->id, strerror(errno));
         udi_printf("%s\n", errmsg->msg);
         return -1;
@@ -1201,7 +1200,7 @@ int thread_death_handshake(thread *thr, udi_errmsg *errmsg) {
         }
 
         if ( unlink(response_file) != 0 ) {
-            snprintf(errmsg->msg, errmsg->size, "failed to unlink %s: %s",
+            udi_set_errmsg(errmsg->msg, errmsg->size, "failed to unlink %s: %s",
                     response_file, strerror(errno));
             result = -1;
             break;
@@ -1214,14 +1213,14 @@ int thread_death_handshake(thread *thr, udi_errmsg *errmsg) {
         }
 
         if ( unlink(request_file) != 0 ) {
-            snprintf(errmsg->msg, errmsg->size, "failed to unlink %s: %s",
+            udi_set_errmsg(errmsg->msg, errmsg->size, "failed to unlink %s: %s",
                     request_file, strerror(errno));
             result = -1;
             break;
         }
 
         if ( rmdir(thread_dir) != 0 ) {
-            snprintf(errmsg->msg, errmsg->size, "failed to rmdir %s: %s",
+            udi_set_errmsg(errmsg->msg, errmsg->size, "failed to rmdir %s: %s",
                     thread_dir, strerror(errno));
             result = -1;
             break;
@@ -1247,7 +1246,7 @@ int process_response_fd_callback(void *ctx, udirt_fd *resp_fd, udi_errmsg *errms
 
     response_handle = open(responsefile_name, O_WRONLY);
     if (response_handle == -1) {
-        snprintf(errmsg->msg,
+        udi_set_errmsg(errmsg->msg,
                  errmsg->size,
                  "error opening response file fifo: %s",
                  strerror(errno));
@@ -1256,7 +1255,7 @@ int process_response_fd_callback(void *ctx, udirt_fd *resp_fd, udi_errmsg *errms
 
     thread *thr = create_initial_thread();
     if (thr == NULL) {
-        snprintf(errmsg->msg,
+        udi_set_errmsg(errmsg->msg,
                  errmsg->size,
                  "failed to create initial thread");
         return RESULT_ERROR;
@@ -1269,7 +1268,7 @@ int process_response_fd_callback(void *ctx, udirt_fd *resp_fd, udi_errmsg *errms
 
     events_handle = open(eventsfile_name, O_WRONLY);
     if (events_handle == -1) {
-        snprintf(errmsg->msg,
+        udi_set_errmsg(errmsg->msg,
                  errmsg->size,
                  "error opening response file fifo: %s",
                  strerror(errno));
@@ -1293,7 +1292,7 @@ int handshake_with_debugger(udi_errmsg *errmsg) {
     int result;
     do {
         if ((request_handle = open(requestfile_name, O_RDONLY)) == -1 ) {
-            snprintf(errmsg->msg,
+            udi_set_errmsg(errmsg->msg,
                      errmsg->size,
                      "error opening request file fifo: %s",
                      strerror(errno));
@@ -1355,7 +1354,7 @@ void init_udirt() {
 
         // Block any signals during initialization
         if ( setsigmask(SIG_SETMASK, &block_set, &original_set) == -1 ) {
-            snprintf(errmsg.msg,
+            udi_set_errmsg(errmsg.msg,
                      errmsg.size,
                      "failed to block all signals: %s",
                      strerror(errno));
@@ -1374,7 +1373,7 @@ void init_udirt() {
         }
 
         if ( initialize_thread_sync() != 0 ) {
-            snprintf(errmsg.msg,
+            udi_set_errmsg(errmsg.msg,
                      errmsg.size,
                      "failed to initialize thread sync");
             result = RESULT_ERROR;
@@ -1383,7 +1382,7 @@ void init_udirt() {
 
         int signal_result = setup_signal_handlers();
         if ( signal_result != 0 ) {
-            snprintf(errmsg.msg,
+            udi_set_errmsg(errmsg.msg,
                      errmsg.size,
                      "failed to setup signal handlers: %s",
                      strerror(signal_result));
@@ -1397,9 +1396,8 @@ void init_udirt() {
         }
 
         if ( create_udi_filesystem() != 0 ) {
-            snprintf(errmsg.msg,
-                     errmsg.size,
-                     "failed to create udi filesystem");
+            udi_set_errmsg(&errmsg,
+                           "failed to create udi filesystem");
             result = RESULT_ERROR;
             break;
         }
@@ -1529,4 +1527,8 @@ int write_to(udirt_fd fd, const uint8_t *src, size_t length) {
     }
 
     return errnum;
+}
+
+udirt_fd udi_log_fd() {
+    return STDERR_FILENO;
 }
