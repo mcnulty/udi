@@ -88,7 +88,7 @@ int single_thread_executing() {
 /**
  * A UDI version of abort that performs some cleanup before calling abort
  */
-void udi_abort(const char *file, unsigned int line) {
+void udi_abort_file_line(const char *file, unsigned int line) {
     udi_log("udi_abort at %s[%d]", file, line);
 
     if ( real_sigaction ) {
@@ -402,15 +402,14 @@ int decode_trap(thread *thr,
 
     int result;
     if ( bp != NULL ) {
-        udi_printf("breakpoint hit at 0x%"PRIx64"\n", trap_address);
+        udi_log("breakpoint hit at %a", trap_address);
         result = decode_breakpoint(thr, bp, context, wait_for_request, errmsg);
     }else{
         // TODO create signal event
-        udi_set_errmsg(errmsg->msg,
-                 errmsg->size,
-                 "failed to decode trap event at 0x%"PRIx64,
-                 trap_address);
-        udi_abort(__FILE__, __LINE__);
+        udi_set_errmsg(errmsg,
+                       "failed to decode trap event at %a",
+                       trap_address);
+        udi_abort();
         result = RESULT_ERROR;
         *wait_for_request = 0;
     }
@@ -423,7 +422,8 @@ int decode_trap(thread *thr,
  *
  * See manpage for sigaction
  */
-void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
+static
+void signal_entry_impl(int signal, siginfo_t *siginfo, void *v_context) {
     udi_errmsg errmsg;
     errmsg.size = ERRMSG_SIZE;
     errmsg.msg[ERRMSG_SIZE-1] = '\0';
@@ -431,7 +431,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
     ucontext_t *context = (ucontext_t *)v_context;
 
     if ( pipe_write_failure && signal == SIGPIPE ) {
-        udi_printf("%s\n", "Ignoring SIGPIPE due to previous library write failure");
+        udi_log("Ignoring SIGPIPE due to previous library write failure");
         pipe_write_failure = 0;
 
         app_signal_handler(signal, siginfo, v_context);
@@ -445,24 +445,25 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
     }
 
     if (!udi_enabled && !is_performing_mem_access()) {
-        udi_printf("UDI disabled, not handling signal %d at addr 0x%08lx\n", signal,
-                (unsigned long)siginfo->si_addr);
+        udi_log("UDI disabled, not handling signal %d at addr %a",
+                signal,
+                (uint64_t)siginfo->si_addr);
         return;
     }
 
-    udi_printf(">>> signal entry for 0x%"PRIx64"/0x%"PRIx64" with %d at 0x%"PRIx64"\n",
+    udi_log(">>> signal entry for %a/%a with %d at %a",
                get_user_thread_id(),
                get_kernel_thread_id(),
                signal,
                get_pc(context));
     if ( is_performing_mem_access() ) {
-        udi_printf("memory access at 0x%lx in progress\n", (unsigned long)get_mem_access_addr());
+        udi_log("memory access at %a in progress", (uint64_t)get_mem_access_addr());
     }
 
     thread *thr = get_current_thread();
 
     if ( signal == THREAD_SUSPEND_SIGNAL && (thr == NULL || thr->suspend_pending == 1) ) {
-        udi_printf("ignoring extraneous suspend signal for 0x%"PRIx64"/0x%"PRIx64"\n",
+        udi_log("ignoring extraneous suspend signal for %a/%a",
                 get_user_thread_id(),
                 get_kernel_thread_id());
 
@@ -480,15 +481,16 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
 
         int block_result = block_other_threads();
         if ( block_result == -1 ) {
-            udi_printf("%s\n", "failed to block other threads");
-            udi_abort(__FILE__, __LINE__);
+            udi_log("failed to block other threads");
+            udi_abort();
             return;
         }
 
         if ( block_result > 0 ) {
             thr->event_state.context_valid = 0;
 
-            udi_printf("<<< waiting thread 0x%"PRIx64" exiting signal handler\n", get_user_thread_id());
+            udi_log("<<< waiting thread %a exiting signal handler",
+                    get_user_thread_id());
             return;
         }
     }else if (continue_bp != NULL) {
@@ -498,7 +500,7 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
         }
     }
 
-    udi_printf("thread 0x%"PRIx64"/0x%"PRIx64" now handling signal %d\n",
+    udi_log("thread %a/%a now handling signal %d",
             get_user_thread_id(),
             get_kernel_thread_id(),
             signal);
@@ -533,8 +535,8 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
             uint64_t pc = get_pc(context);
             uint64_t successor = get_ctf_successor(pc, &errmsg, context);
             if (successor == 0) {
-                udi_printf("failed to determine successor for instruction at 0x%"PRIx64"\n",
-                           pc);
+                udi_log("failed to determine successor for instruction at %a",
+                        pc);
                 result = RESULT_ERROR;
             }else{
                 breakpoint *existing_bp = find_breakpoint(successor);
@@ -545,15 +547,15 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
                 if ( existing_bp == NULL ) {
                     thr->single_step_bp = create_breakpoint(successor);
                     if (thr->single_step_bp == NULL) {
-                        udi_printf("failed to create single step breakpoint at 0x%"PRIx64"\n",
-                                   successor);
+                        udi_log("failed to create single step breakpoint at %a",
+                                successor);
                         result = RESULT_ERROR;
                     }else{
                         thr->single_step_bp->thread = thr;
                         int install_result = install_breakpoint(thr->single_step_bp, &errmsg);
                         if (install_result != 0) {
-                            udi_printf("failed to install single step breakpoint at 0x%"PRIx64"\n",
-                                       successor);
+                            udi_log("failed to install single step breakpoint at %a",
+                                    successor);
                             result = RESULT_ERROR;
                         }
                     }
@@ -568,8 +570,8 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
 
             int error_result = handle_error_event(get_user_thread_id(), &errmsg);
             if (error_result != RESULT_SUCCESS) {
-                udi_printf("aborting due to event reporting failure: %s\n", errmsg.msg);
-                udi_abort(__FILE__, __LINE__);
+                udi_log("aborting due to event reporting failure: %s", errmsg.msg);
+                udi_abort();
             }
         }
 
@@ -588,8 +590,8 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
 
     if ( result != RESULT_SUCCESS ) {
         if ( request_error ) {
-            udi_printf("Aborting due to request failure: %s\n", errmsg.msg);
-            udi_abort(__FILE__, __LINE__);
+            udi_log("Aborting due to request failure: %s", errmsg.msg);
+            udi_abort();
         }
     }else{
         // Cleanup before returning to user code
@@ -598,15 +600,21 @@ void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
         }
     }
 
-    udi_printf("<<< signal exit for 0x%"PRIx64"/0x%"PRIx64" with %d at 0x%"PRIx64"\n",
-               get_user_thread_id(),
-               get_kernel_thread_id(),
-               signal,
-               get_pc(context));
+    udi_log("<<< signal exit for %a/%a with %d at %a",
+            get_user_thread_id(),
+            get_kernel_thread_id(),
+            signal,
+            get_pc(context));
 
     if (thr != NULL) {
         thr->event_state.context_valid = 0;
     }
+}
+
+void signal_entry_point(int signal, siginfo_t *siginfo, void *v_context) {
+    int saved_errno = errno;
+    signal_entry_impl(signal, siginfo, v_context);
+    errno = saved_errno;
 }
 
 /**
@@ -616,7 +624,6 @@ static void enable_debug_logging() {
     // turn on debugging, if necessary
     if (getenv(UDI_DEBUG_ENV) != NULL) {
         udi_debug_on = 1;
-        udi_printf("%s\n", "UDI rt debug logging enabled");
     }
 }
 
@@ -624,6 +631,7 @@ static void enable_debug_logging() {
  * Performs any necessary global initialization
  */
 static void global_initialization() {
+    init_thread_support();
     init_req_handling();
 }
 
@@ -656,19 +664,20 @@ static int create_udi_filesystem() {
             + 1*DS_LEN + 1;
         basedir_name = (char *)udi_malloc(basedir_length);
         if (basedir_name == NULL) {
-            udi_printf("malloc failed: %s\n", strerror(errno));
+            udi_log("malloc failed: %e", errno);
             errnum = errno;
             break;
         }
 
-        udi_set_errmsg(basedir_name,
-                 basedir_length,
-                 "%s/%d",
-                 UDI_ROOT_DIR,
-                 getpid());
+        udi_formatted_str(basedir_name,
+                          basedir_length,
+                          "%s/%d",
+                          UDI_ROOT_DIR,
+                          getpid());
         if (mkdir(basedir_name, S_IRWXG | S_IRWXU) == -1) {
-            udi_printf("error creating basedir '%s': %s\n", basedir_name,
-                    strerror(errno));
+            udi_log("error creating basedir '%s': %e",
+                    basedir_name,
+                    errno);
             errnum = errno;
             break;
         }
@@ -678,20 +687,19 @@ static int create_udi_filesystem() {
                                     + strlen(REQUEST_FILE_NAME) + DS_LEN;
         requestfile_name = (char *)udi_malloc(requestfile_length);
         if (requestfile_name == NULL) {
-            udi_printf("malloc failed: %s\n", strerror(errno));
+            udi_log("malloc failed: %e", errno);
             errnum = errno;
             break;
         }
 
-        udi_set_errmsg(requestfile_name,
-                 requestfile_length,
-                 "%s/%d/%s",
-                 UDI_ROOT_DIR,
-                 getpid(),
-                 REQUEST_FILE_NAME);
+        udi_formatted_str(requestfile_name,
+                          requestfile_length,
+                          "%s/%d/%s",
+                          UDI_ROOT_DIR,
+                          getpid(),
+                          REQUEST_FILE_NAME);
         if (mkfifo(requestfile_name, S_IRWXG | S_IRWXU) == -1) {
-            udi_printf("error creating request file fifo: %s\n",
-                       strerror(errno));
+            udi_log("error creating request file fifo: %e", errno);
             errnum = errno;
             break;
         }
@@ -700,21 +708,19 @@ static int create_udi_filesystem() {
                                strlen(RESPONSE_FILE_NAME) + DS_LEN;
         responsefile_name = (char *)udi_malloc(responsefile_length);
         if (responsefile_name == NULL) {
-            udi_printf("malloc failed: %s\n",
-                       strerror(errno));
+            udi_log("malloc failed: %s", errno);
             errnum = errno;
             break;
         }
 
-        udi_set_errmsg(responsefile_name,
-                 responsefile_length,
-                 "%s/%d/%s",
-                 UDI_ROOT_DIR,
-                 getpid(),
-                 RESPONSE_FILE_NAME);
+        udi_formatted_str(responsefile_name,
+                          responsefile_length,
+                          "%s/%d/%s",
+                          UDI_ROOT_DIR,
+                          getpid(),
+                          RESPONSE_FILE_NAME);
         if (mkfifo(responsefile_name, S_IRWXG | S_IRWXU) == -1) {
-            udi_printf("error creating response file fifo: %s\n",
-                       strerror(errno));
+            udi_log("error creating response file fifo: %e", errno);
             errnum = errno;
             break;
         }
@@ -723,21 +729,19 @@ static int create_udi_filesystem() {
                              strlen(EVENTS_FILE_NAME) + DS_LEN;
         eventsfile_name = (char *)udi_malloc(eventsfile_length);
         if (eventsfile_name == NULL) {
-            udi_printf("malloc failed: %s\n",
-                       strerror(errno));
+            udi_log("malloc failed: %e", errno);
             errnum = errno;
             break;
         }
 
-        udi_set_errmsg(eventsfile_name,
-                 eventsfile_length,
-                 "%s/%d/%s",
-                 UDI_ROOT_DIR,
-                 getpid(),
-                 EVENTS_FILE_NAME);
+        udi_formatted_str(eventsfile_name,
+                          eventsfile_length,
+                          "%s/%d/%s",
+                          UDI_ROOT_DIR,
+                          getpid(),
+                          EVENTS_FILE_NAME);
         if (mkfifo(eventsfile_name, S_IRWXG | S_IRWXU) == -1) {
-            udi_printf("error creating event file fifo: %s\n",
-                       strerror(errno));
+            udi_log("error creating event file fifo: %e", errno);
             errnum = errno;
             break;
         }
@@ -754,7 +758,7 @@ int initialize_thread_sync() {
     if ( get_multithread_capable() ) {
         int control_pipe[2];
         if ( pipe(control_pipe) != 0 ) {
-            udi_printf("failed to create sync pipe for barrier: %s\n", strerror(errno));
+            udi_log("failed to create sync pipe for barrier: %e", errno);
             return -1;
         }
 
@@ -770,13 +774,38 @@ int initialize_thread_sync() {
 
 const unsigned char sentinel = 0x21;
 
+static
+void read_sentinel(int fd) {
+    int complete = 0;
+    while (!complete) {
+        unsigned char trigger;
+        int result = read(fd, &trigger, 1);
+        if (result == 1) {
+            if (trigger != sentinel) {
+                udi_abort();
+                return;
+            }
+            complete = 1;
+        } else if (result == 0) {
+            udi_log("sentinel read encountered eof");
+            udi_abort();
+            return;
+        } else if (result == -1) {
+            if (errno == EINTR) continue;
+            udi_log("sentinel read encountered error %e", errno);
+            udi_abort();
+            return;
+        }
+    }
+}
+
 int block_other_threads() {
     int result = 0;
 
     if (get_multithreaded()) {
         thread *thr = get_current_thread();
         if ( thr == NULL ) {
-            udi_printf("found unknown thread 0x%"PRIx64"\n", get_user_thread_id());
+            udi_log("found unknown thread %a", get_user_thread_id());
             return -1;
         }
 
@@ -784,7 +813,7 @@ int block_other_threads() {
         unsigned int sync_var = __sync_val_compare_and_swap(&(thread_barrier.sync_var), 0, 1);
         if (sync_var == 0) {
             thr->control_thread = 1;
-            udi_printf("thread 0x%"PRIx64" is the control thread\n", thr->id);
+            udi_log("thread %a is the control thread", thr->id);
 
             int num_suspended = 0;
             thread *iter = get_thread_list();
@@ -795,19 +824,20 @@ int block_other_threads() {
                     // only force running threads into the signal handler, suspended threads are
                     // already in the signal handler
                     if (iter->ts != UDI_TS_SUSPENDED) {
-                        if ( pthread_kill((pthread_t)iter->id, THREAD_SUSPEND_SIGNAL) != 0 ) {
-                            udi_printf("failed to send signal to 0x%"PRIx64"\n",
-                                       iter->id);
+                        int kill_result = pthread_kill((pthread_t)iter->id, THREAD_SUSPEND_SIGNAL);
+                        if ( kill_result != 0 ) {
+                            udi_log("failed to send signal to %a: %e", iter->id, kill_result);
+                            udi_abort();
                             return -1;
                         }
-                        udi_printf("thread 0x%"PRIx64" sent suspend signal %d to thread 0x%"PRIx64"\n",
-                                   thr->id,
-                                   THREAD_SUSPEND_SIGNAL,
-                                   iter->id);
+                        udi_log("thread %a sent suspend signal %d to thread %a",
+                                thr->id,
+                                THREAD_SUSPEND_SIGNAL,
+                                iter->id);
                         num_suspended++;
                     }else{
-                        udi_printf("thread 0x%"PRIx64" already suspended, not signalling\n",
-                                   iter->id);
+                        udi_log("thread %a already suspended, not signaling",
+                                iter->id);
                     }
                 }
                 iter = iter->next_thread;
@@ -818,47 +848,31 @@ int block_other_threads() {
             // wait for the other threads to reach this function
             int i;
             for (i = 0; i < num_suspended; ++i) {
-                unsigned char trigger;
-                if ( read(thread_barrier.read_handle, &trigger, 1) != 1 ) {
-                    udi_printf("failed to read trigger from pipe: %s\n", strerror(errno));
-                    return -1;
-                }
-
-                if ( trigger != sentinel ) {
-                    udi_abort(__FILE__, __LINE__);
-                    return -1;
-                }
+                read_sentinel(thread_barrier.read_handle);
             }
-            udi_printf("thread 0x%"PRIx64" blocked other threads\n", thr->id);
+            udi_log("thread %a blocked other threads", thr->id);
         }else{
             // signal that thread is now waiting to be released
             if ( write(thread_barrier.write_handle, &sentinel, 1) != 1 ) {
-                udi_printf("failed to write trigger to pipe: %s\n", strerror(errno));
+                udi_log("failed to write trigger to pipe: %a", errno);
+                udi_abort();
                 return -1;
             }
 
-            udi_printf("thread 0x%"PRIx64" waiting to be released (pending signal = %d)\n", thr->id,
-                       thr->event_state.signal);
+            udi_log("thread %a waiting to be released (pending signal = %d)",
+                    thr->id,
+                    thr->event_state.signal);
 
             // Indicate that another suspend signal is pending if the reason for the thread
             // to enter the handler was not triggered by the library
             if ( thr->event_state.signal != THREAD_SUSPEND_SIGNAL ) {
                 thr->suspend_pending = 1;
-                udi_printf("thread 0x%"PRIx64" has a suspend signal pending\n", thr->id);
+                udi_log("thread %a has a suspend signal pending", thr->id);
             }else{
                 thr->suspend_pending = 0;
             }
 
-            unsigned char trigger;
-            if ( read(thr->control_read, &trigger, 1) != 1 ) {
-                udi_printf("failed to read control trigger from pipe: %s\n", strerror(errno));
-                return -1;
-            }
-
-            if ( trigger != sentinel ) {
-                udi_abort(__FILE__, __LINE__);
-                return -1;
-            }
+            read_sentinel(thr->control_read);
         }
 
         // if this thread has become the control thread, act accordingly
@@ -881,8 +895,10 @@ int release_other_threads() {
             // signal to the thread. The result is that there is no way to handle the externally
             // sourced signal.
             if ( iter != thr &&
-                 iter->event_state.signal != THREAD_SUSPEND_SIGNAL &&
-                 iter->event_state.signal != 0 ) {
+                 ( (iter->event_state.signal != THREAD_SUSPEND_SIGNAL &&
+                    iter->event_state.signal != 0) ||
+                   iter->stack_event_pending) )
+            {
                 break;
             }
             iter = iter->next_thread;
@@ -898,23 +914,25 @@ int release_other_threads() {
             __sync_val_compare_and_swap(&(iter->control_thread), 0, 1);
 
             if ( write(iter->control_write, &sentinel, 1) != 1 ) {
-                udi_printf("failed to write control trigger to pipe for 0x%"PRIx64": %s\n",
-                           iter->id,
-                           strerror(errno));
+                udi_log("failed to write control trigger to pipe for %a: %e",
+                        iter->id,
+                        errno);
+                udi_abort();
                 return -1;
             }
 
             if ( thr != NULL ) {
-                udi_printf("thread 0x%"PRIx64" waiting to be released after transferring control to thread 0x%"PRIx64"\n",
+                udi_log("thread %a waiting to be released after transferring control to thread %a",
                         thr->id, iter->id);
                 unsigned char trigger;
                 if ( read(thr->control_read, &trigger, 1) != 1 ) {
-                    udi_printf("failed to read control trigger from pipe: %s\n", strerror(errno));
+                    udi_log("failed to read control trigger from pipe: %a", errno);
+                    udi_abort();
                     return -1;
                 }
 
                 if ( trigger != sentinel ) {
-                    udi_abort(__FILE__, __LINE__);
+                    udi_abort();
                     return -1;
                 }
             }
@@ -930,31 +948,23 @@ int release_other_threads() {
             while ( iter != NULL ) {
                 if ( iter != thr && iter->ts == UDI_TS_RUNNING ) {
                     if ( write(iter->control_write, &sentinel, 1) != 1 ) {
-                        udi_printf("failed to write control trigger to pipe for 0x%"PRIx64": %s\n",
-                                   iter->id,
-                                   strerror(errno));
+                        udi_log("failed to write control trigger to pipe for %a: %e",
+                                iter->id,
+                                errno);
+                        udi_abort();
                         return -1;
                     }
                 }
                 iter = iter->next_thread;
             }
 
-            udi_printf("thread 0x%"PRIx64" released other threads\n", get_user_thread_id());
+            udi_log("thread %a released other threads", get_user_thread_id());
 
             if ( thr != NULL && thr->ts == UDI_TS_SUSPENDED ) {
                 // If the current thread was suspended in this signal handler call, block here
-                udi_printf("thread 0x%"PRIx64" waiting to be released after releasing threads\n", thr->id);
+                udi_log("thread %a waiting to be released after releasing threads", thr->id);
 
-                unsigned char trigger;
-                if ( read(thr->control_read, &trigger, 1) != 1 ) {
-                    udi_printf("failed to read control trigger from pipe: %s\n", strerror(errno));
-                    return -1;
-                }
-
-                if ( trigger != sentinel ) {
-                    udi_abort(__FILE__, __LINE__);
-                    return -1;
-                }
+                read_sentinel(thr->control_read);
             }
         }
     }
@@ -973,16 +983,16 @@ static
 char *get_thread_dir(thread *thr) {
     char subdir_name[32];
 
-    udi_set_errmsg(subdir_name, 32, "%"PRIx64, thr->id);
+    udi_formatted_str(subdir_name, 32, "%x", thr->id);
 
     size_t dir_length = strlen(basedir_name) + DS_LEN + strlen(subdir_name) + 1;
     char *thread_dir = (char *)udi_malloc(dir_length);
     if (thread_dir == NULL) {
-        udi_printf("malloc failed: %s\n", strerror(errno));
+        udi_log("malloc failed: %e", errno);
         return NULL;
     }
 
-    udi_set_errmsg(thread_dir, dir_length, "%s/%s", basedir_name, subdir_name);
+    udi_formatted_str(thread_dir, dir_length, "%s/%s", basedir_name, subdir_name);
     return thread_dir;
 }
 
@@ -1000,11 +1010,11 @@ char *get_thread_file(thread *thr, char *thread_dir, const char *filename) {
     size_t file_length = strlen(thread_dir) + DS_LEN + strlen(filename) + 1;
     char *thread_file = (char *)udi_malloc(file_length);
     if (thread_file == NULL) {
-        udi_printf("malloc failed: %s\n", strerror(errno));
+        udi_log("malloc failed: %e", errno);
         return NULL;
     }
 
-    udi_set_errmsg(thread_file, file_length, "%s/%s", thread_dir, filename);
+    udi_formatted_str(thread_file, file_length, "%s/%s", thread_dir, filename);
     return thread_file;
 }
 
@@ -1022,8 +1032,10 @@ int thread_create_callback(thread *thr, udi_errmsg *errmsg) {
         }
 
         if (mkdir(thread_dir, S_IRWXG | S_IRWXU) == -1) {
-            udi_set_errmsg(errmsg->msg, errmsg->size, "failed to create directory %s: %s", 
-                    thread_dir, strerror(errno));
+            udi_set_errmsg(errmsg,
+                           "failed to create directory %s: %e",
+                           thread_dir,
+                           errno);
             result = -1;
             break;
         }
@@ -1041,22 +1053,25 @@ int thread_create_callback(thread *thr, udi_errmsg *errmsg) {
         }
 
         if (mkfifo(request_file, S_IRWXG | S_IRWXU) == -1) {
-            udi_set_errmsg(errmsg->msg, errmsg->size, "failed to create request pipe %s: %s", 
-                    request_file, strerror(errno));
+            udi_set_errmsg(errmsg,
+                           "failed to create request pipe %s: %e",
+                           request_file,
+                           errno);
             result = -1;
             break;
         }
 
         if (mkfifo(response_file, S_IRWXG | S_IRWXU) == -1) {
-            udi_set_errmsg(errmsg->msg, errmsg->size, "failed to create response pipe %s: %s", 
-                    response_file, strerror(errno));
+            udi_set_errmsg(errmsg, "failed to create response pipe %s: %e",
+                           response_file,
+                           errno);
             result = -1;
             break;
         }
     }while(0);
 
     if (result != 0) {
-        udi_printf("%s\n", errmsg->msg);
+        udi_log("%s", errmsg->msg);
     }
 
     udi_free(thread_dir);
@@ -1077,11 +1092,10 @@ int thread_create_response_fd_callback(void *ctx, udirt_fd *resp_fd, udi_errmsg 
 
     resp_ctx->thr->response_handle = open(resp_ctx->response_file, O_WRONLY);
     if (resp_ctx->thr->response_handle == -1) {
-        udi_set_errmsg(errmsg->msg,
-                 errmsg->size,
-                 "failed to open %s: %s",
-                 resp_ctx->response_file,
-                 strerror(errno));
+        udi_set_errmsg(errmsg,
+                       "failed to open %s: %e",
+                       resp_ctx->response_file,
+                       errno);
         return RESULT_ERROR;
     }
 
@@ -1115,11 +1129,10 @@ int thread_create_handshake(thread *thr, udi_errmsg *errmsg) {
 
         thr->request_handle = open(request_file, O_RDONLY);
         if (thr->request_handle == -1) {
-            udi_set_errmsg(errmsg->msg,
-                     errmsg->size,
-                     "failed to open %s: %s",
-                     request_file,
-                     strerror(errno));
+            udi_set_errmsg(errmsg,
+                           "failed to open %s: %e",
+                           request_file,
+                           errno);
             result = RESULT_ERROR;
             break;
         }
@@ -1134,14 +1147,13 @@ int thread_create_handshake(thread *thr, udi_errmsg *errmsg) {
                                         thr->id,
                                         errmsg);
         if (result != RESULT_SUCCESS) {
-            udi_printf("failed to complete init handshake for thread 0x%"PRIx64"\n",
-                       thr->id);
+            udi_log("failed to complete init handshake for thread %a", thr->id);
             break;
         }
     }while(0);
 
     if (result != RESULT_SUCCESS) {
-        udi_printf("failed to complete handshake for thread: %s\n", errmsg->msg);
+        udi_log("failed to complete handshake for thread: %s", errmsg->msg);
     }
 
     udi_free(thread_dir);
@@ -1153,13 +1165,15 @@ int thread_create_handshake(thread *thr, udi_errmsg *errmsg) {
 
 int thread_death_callback(thread *thr, udi_errmsg *errmsg) {
     thr->dead = 1;
-    udi_printf("thread 0x%"PRIx64" marked dead\n", thr->id);
+    udi_log("thread %s marked dead", thr->id);
 
     // close the response file
     if ( close(thr->response_handle) != 0 ) {
-        udi_set_errmsg(errmsg->msg, errmsg->size, "failed to close response handle for thread 0x%"PRIx64": %s",
-                thr->id, strerror(errno));
-        udi_printf("%s\n", errmsg->msg);
+        udi_set_errmsg(errmsg,
+                       "failed to close response handle for thread %a: %s",
+                       thr->id,
+                       errno);
+        udi_log("%s", errmsg->msg);
         return -1;
     }
 
@@ -1169,17 +1183,20 @@ int thread_death_callback(thread *thr, udi_errmsg *errmsg) {
 int thread_death_handshake(thread *thr, udi_errmsg *errmsg) {
 
     if (!thr->dead) {
-        udi_set_errmsg(errmsg->msg, errmsg->size, "thread 0x%"PRIx64" is not dead, not completing handshake",
-                thr->id);
-        udi_printf("%s\n", errmsg->msg);
+        udi_set_errmsg(errmsg,
+                       "thread %a is not dead, not completing handshake",
+                       thr->id);
+        udi_log("%s", errmsg->msg);
         return -1;
     }
 
     // close the request file
     if ( close(thr->request_handle) != 0 ) {
-        udi_set_errmsg(errmsg->msg, errmsg->size, "failed to close request handle for thread 0x%"PRIx64": %s",
-                thr->id, strerror(errno));
-        udi_printf("%s\n", errmsg->msg);
+        udi_set_errmsg(errmsg,
+                       "failed to close request handle for thread %a: %e",
+                       thr->id,
+                       errno);
+        udi_log("%s", errmsg->msg);
         return -1;
     }
 
@@ -1200,8 +1217,10 @@ int thread_death_handshake(thread *thr, udi_errmsg *errmsg) {
         }
 
         if ( unlink(response_file) != 0 ) {
-            udi_set_errmsg(errmsg->msg, errmsg->size, "failed to unlink %s: %s",
-                    response_file, strerror(errno));
+            udi_set_errmsg(errmsg,
+                           "failed to unlink %s: %e",
+                           response_file,
+                           errno);
             result = -1;
             break;
         }
@@ -1213,22 +1232,25 @@ int thread_death_handshake(thread *thr, udi_errmsg *errmsg) {
         }
 
         if ( unlink(request_file) != 0 ) {
-            udi_set_errmsg(errmsg->msg, errmsg->size, "failed to unlink %s: %s",
-                    request_file, strerror(errno));
+            udi_set_errmsg(errmsg,
+                           "failed to unlink %s: %e",
+                           request_file,
+                           errno);
             result = -1;
             break;
         }
 
         if ( rmdir(thread_dir) != 0 ) {
-            udi_set_errmsg(errmsg->msg, errmsg->size, "failed to rmdir %s: %s",
-                    thread_dir, strerror(errno));
+            udi_set_errmsg(errmsg, "failed to rmdir %s: %e",
+                           thread_dir,
+                           errno);
             result = -1;
             break;
         }
     }while(0);
 
     if ( result != 0 ) {
-        udi_printf("%s\n", errmsg->msg);
+        udi_log("%s", errmsg->msg);
     }
 
     udi_free(thread_dir);
@@ -1246,32 +1268,29 @@ int process_response_fd_callback(void *ctx, udirt_fd *resp_fd, udi_errmsg *errms
 
     response_handle = open(responsefile_name, O_WRONLY);
     if (response_handle == -1) {
-        udi_set_errmsg(errmsg->msg,
-                 errmsg->size,
-                 "error opening response file fifo: %s",
-                 strerror(errno));
+        udi_set_errmsg(errmsg,
+                       "error opening response file fifo: %e",
+                       errno);
         return RESULT_ERROR;
     }
 
     thread *thr = create_initial_thread();
     if (thr == NULL) {
-        udi_set_errmsg(errmsg->msg,
-                 errmsg->size,
-                 "failed to create initial thread");
+        udi_set_errmsg(errmsg,
+                       "failed to create initial thread");
         return RESULT_ERROR;
     }
 
     if ( thread_create_callback(thr, errmsg) != 0 ) {
-        udi_printf("failed to create thread-specific files: %s\n", errmsg->msg);
+        udi_log("failed to create thread-specific files: %s", errmsg->msg);
         return RESULT_ERROR;
     }
 
     events_handle = open(eventsfile_name, O_WRONLY);
     if (events_handle == -1) {
-        udi_set_errmsg(errmsg->msg,
-                 errmsg->size,
-                 "error opening response file fifo: %s",
-                 strerror(errno));
+        udi_set_errmsg(errmsg,
+                       "error opening response file fifo: %e",
+                       errno);
         return RESULT_ERROR;
     }
 
@@ -1289,13 +1308,12 @@ int process_response_fd_callback(void *ctx, udirt_fd *resp_fd, udi_errmsg *errms
  */
 static
 int handshake_with_debugger(udi_errmsg *errmsg) {
-    int result;
+    int result = RESULT_SUCCESS;
     do {
         if ((request_handle = open(requestfile_name, O_RDONLY)) == -1 ) {
-            udi_set_errmsg(errmsg->msg,
-                     errmsg->size,
-                     "error opening request file fifo: %s",
-                     strerror(errno));
+            udi_set_errmsg(errmsg,
+                           "error opening request file fifo: %e",
+                           errno);
             result = RESULT_ERROR;
             break;
         }
@@ -1312,9 +1330,10 @@ int handshake_with_debugger(udi_errmsg *errmsg) {
 
         result = thread_create_handshake(thr, errmsg);
         if (result != RESULT_SUCCESS) {
-            udi_printf("failed to complete thread create handshake: %s\n", errmsg->msg);
+            udi_log("failed to complete thread create handshake: %s", errmsg->msg);
             break;
         }
+
 
         // after sending init response, any debugging operations are valid
         udi_enabled = 1;
@@ -1354,10 +1373,9 @@ void init_udirt() {
 
         // Block any signals during initialization
         if ( setsigmask(SIG_SETMASK, &block_set, &original_set) == -1 ) {
-            udi_set_errmsg(errmsg.msg,
-                     errmsg.size,
-                     "failed to block all signals: %s",
-                     strerror(errno));
+            udi_set_errmsg(&errmsg,
+                           "failed to block all signals: %e",
+                           errno);
             result = RESULT_ERROR;
             break;
         }
@@ -1373,19 +1391,17 @@ void init_udirt() {
         }
 
         if ( initialize_thread_sync() != 0 ) {
-            udi_set_errmsg(errmsg.msg,
-                     errmsg.size,
-                     "failed to initialize thread sync");
+            udi_set_errmsg(&errmsg,
+                           "failed to initialize thread sync");
             result = RESULT_ERROR;
             break;
         }
 
         int signal_result = setup_signal_handlers();
         if ( signal_result != 0 ) {
-            udi_set_errmsg(errmsg.msg,
-                     errmsg.size,
-                     "failed to setup signal handlers: %s",
-                     strerror(signal_result));
+            udi_set_errmsg(&errmsg,
+                           "failed to setup signal handlers: %e",
+                           signal_result);
             result = RESULT_ERROR;
             break;
         }
@@ -1404,13 +1420,13 @@ void init_udirt() {
 
         result = handshake_with_debugger(&errmsg);
         if (result != RESULT_SUCCESS) {
-            udi_printf("%s\n", "failed to complete handshake with debugger");
+            udi_log("failed to complete handshake with debugger");
             break;
         }
 
         result = wait_and_execute_command(&errmsg, &request_thr);
         if ( result != RESULT_SUCCESS ) {
-            udi_printf("%s\n", "failed to handle initial command");
+            udi_log("failed to handle initial command");
             break;
         }
     } while(0);
@@ -1418,10 +1434,10 @@ void init_udirt() {
     if (result != RESULT_SUCCESS ) {
         udi_enabled = 0;
 
-        udi_printf("initialization failed: %s\n", errmsg.msg);
-        udi_abort(__FILE__, __LINE__);
+        udi_log("initialization failed: %s", errmsg.msg);
+        udi_abort();
     }else{
-        udi_printf("initialization completed\n");
+        udi_log("initialization completed");
     }
 
     // Explicitly ignore errors
@@ -1448,14 +1464,6 @@ int read_from(udirt_fd fd, uint8_t *dst, size_t length)
         total += num_read;
     }
 
-    if (udi_debug_on) {
-        udi_printf_noprefix("IN ");
-        for (int i = 0; i < length; ++i) {
-            udi_printf_noprefix(" %02hhx ", dst[i]);
-        }
-        udi_printf_noprefix("\n");
-    }
-
     return 0;
 }
 
@@ -1469,26 +1477,26 @@ void handle_pipe_write_failure() {
     sigset_t set;
 
     if ( sigpending(&set) != 0 ) {
-        udi_printf("failed to get pending signals: %s\n", strerror(errno));
+        udi_log("failed to get pending signals: %e", errno);
         return;
     }
 
     if ( sigismember(&set, SIGPIPE) != 1 ) {
-        udi_printf("%s\n", "SIGPIPE is not pending, cannot handle write failure");
+        udi_log("SIGPIPE is not pending, cannot handle write failure");
         return;
     }
 
     sigset_t cur_set;
     if ( setsigmask(SIG_BLOCK, NULL, &cur_set) != 0 ) {
-        udi_printf("failed to get current signals: %s\n", strerror(errno));
+        udi_log("failed to get current signals: %e", errno);
         return;
     }
     sigdelset(&set, SIGPIPE);
 
     sigsuspend(&set);
     if ( errno != EINTR ) {
-        udi_printf("failed to wait for signal to be delivered: %s\n",
-                strerror(errno));
+        udi_log("failed to wait for signal to be delivered: %e",
+                errno);
         return;
     }
 
@@ -1514,16 +1522,6 @@ int write_to(udirt_fd fd, const uint8_t *src, size_t length) {
 
     if (errnum == EPIPE) {
         handle_pipe_write_failure();
-    }
-
-    if (errnum == 0) {
-        if (udi_debug_on) {
-            udi_printf_noprefix("OUT ");
-            for (int i = 0; i < length; ++i) {
-                udi_printf_noprefix(" %02hhx ", src[i]);
-            }
-            udi_printf_noprefix("\n");
-        }
     }
 
     return errnum;

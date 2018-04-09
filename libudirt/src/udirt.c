@@ -562,14 +562,19 @@ void udi_log_byte(format_cb cb, void *ctx, uint8_t byte) {
 }
 
 static
-void udi_log_address(format_cb cb, void *ctx, uint64_t address) {
-    cb(ctx, HEX_PREFIX, 2);
+void udi_log_64bit(format_cb cb, void *ctx, uint64_t address) {
     uint8_t shift = 56;
     while (shift > 0) {
         udi_log_byte(cb, ctx, (uint8_t)(address >> shift) & 0xff);
         shift -= 8;
     }
     udi_log_byte(cb, ctx, (uint8_t)(address) & 0xff);
+}
+
+static
+void udi_log_address(format_cb cb, void *ctx, uint64_t address) {
+    cb(ctx, HEX_PREFIX, 2);
+    udi_log_64bit(cb, ctx, address);
 }
 
 static
@@ -624,6 +629,9 @@ void udi_log_varargs(format_cb cb, void *ctx, const char *format, va_list args_p
             case 'l':
                 udi_log_size_t(cb, ctx, va_arg(args_ptr, size_t));
                 break;
+            case 'x':
+                udi_log_64bit(cb, ctx, va_arg(args_ptr, uint64_t));
+                break;
             default:
                 cb(ctx, format_ptr, 1);
                 break;
@@ -633,6 +641,8 @@ void udi_log_varargs(format_cb cb, void *ctx, const char *format, va_list args_p
 
 void udi_log_formatted(const char *format, const char *file, int line, ...) {
     va_list args_ptr;
+
+    udi_log_lock();
 
     udi_log_string(write_log, NULL, file);
     write_log(NULL, LEFT_SQ, 1);
@@ -646,14 +656,20 @@ void udi_log_formatted(const char *format, const char *file, int line, ...) {
     va_end(args_ptr);
 
     write_log(NULL, LF, 1);
+
+    udi_log_unlock();
 }
 
 void udi_log_formatted_noprefix(const char *format, ...) {
     va_list args_ptr;
 
+    udi_log_lock();
+
     va_start(args_ptr, format);
     udi_log_varargs(write_log, NULL, format, args_ptr);
     va_end(args_ptr);
+
+    udi_log_unlock();
 }
 
 struct str_ctx {
@@ -685,11 +701,13 @@ void udi_formatted_str(char *str, size_t size, const char *format, ...) {
 
     struct str_ctx ctx;
     ctx.str = str;
-    ctx.size = size;
+    ctx.size = size-1;
     ctx.idx = 0;
 
     va_start(args_ptr, format);
     udi_log_varargs(write_string, &ctx, format, args_ptr);
     va_end(args_ptr);
+
+    str[ctx.idx] = '\0';
 }
 

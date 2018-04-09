@@ -261,7 +261,7 @@ uint64_t get_register_ud_type(ud_type_t reg, const void *v_context) {
             return context->uc_mcontext->__ss.__r15;
 
         default:
-            udi_abort(__FILE__, __LINE__);
+            udi_abort();
             return (uint64_t)-1;
     }
 }
@@ -416,10 +416,9 @@ int get_register(udi_register_e reg,
 
     uint64_t *address = NULL;
     if (get_register_address(reg, u_context, &address) != 0) {
-        snprintf(errmsg->msg,
-                 errmsg->size,
-                 "invalid register %s",
-                 register_str(reg));
+        udi_set_errmsg(errmsg,
+                       "invalid register %s",
+                       register_str(reg));
         return -1;
     }
 
@@ -440,10 +439,9 @@ int set_register(udi_register_e reg,
 
     uint64_t *address = NULL;
     if (get_register_address(reg, u_context, &address) != 0) {
-        snprintf(errmsg->msg,
-                 errmsg->size,
-                 "invalid register %s",
-                 register_str(reg));
+        udi_set_errmsg(errmsg,
+                       "invalid register %s",
+                       register_str(reg));
         return -1;
     }
 

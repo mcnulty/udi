@@ -41,6 +41,8 @@ typedef int udirt_fd;
 #define UDI_WEAK __attribute__((weak))
 #define _DARWIN_C_SOURCE 1
 
+#include <pthread.h>
+
 #endif /* DARWIN */
 
 #else /* UNIX */

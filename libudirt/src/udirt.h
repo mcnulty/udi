@@ -46,7 +46,9 @@ extern const unsigned int DS_LEN;
 extern char *UDI_ROOT_DIR;
 
 // General platform-specific functions
-void udi_abort(const char *file, unsigned int line);
+void udi_abort_file_line(const char *file, unsigned int line);
+#define udi_abort() udi_abort_file_line(__FILE__, __LINE__)
+
 int read_from(udirt_fd fd, uint8_t *dst, size_t length);
 int write_to(udirt_fd fd, const uint8_t *src, size_t length);
 
@@ -84,6 +86,8 @@ typedef struct thread_struct thread;
 typedef struct breakpoint_struct breakpoint;
 
 uint64_t get_user_thread_id();
+
+void init_thread_support();
 
 /**
  * @return The number of threads in this process
@@ -369,6 +373,7 @@ int handle_fork_event(uint64_t tid, uint32_t pid, udi_errmsg *errmsg);
  * |  %d | 32-bit integer | decimal representation of integer |
  * |  %b | byte | hex representation of byte |
  * |  %l | size_t | decimal representation of size_t |
+ * |  %x | 64-bit integer | hex representation of integer |
  *
  * @param format the format
  * @param file the file (__FILE__)
@@ -382,7 +387,10 @@ udirt_fd udi_log_fd();
 
 void udi_formatted_str(char *str, size_t size, const char *format, ...);
 
-#define udi_set_errmsg(errmsg, ...) udi_formatted_str(errmsg->msg, errmsg->size, ## __VA_ARGS__)
+void udi_log_lock();
+void udi_log_unlock();
+
+#define udi_set_errmsg(errmsg, ...) udi_formatted_str((errmsg)->msg, (errmsg)->size, ## __VA_ARGS__)
 
 #define udi_log(format, ...) \
     do {\
@@ -397,6 +405,9 @@ void udi_formatted_str(char *str, size_t size, const char *format, ...);
             udi_log_formatted_noprefix(format, ## __VA_ARGS__);\
         }\
     }while(0)
+
+#define udi_log_debug(format, ...) \
+    udi_log_formatted(format, __FILE__, __LINE__, ## __VA_ARGS__)
 
 #ifdef __cplusplus
 } // extern C

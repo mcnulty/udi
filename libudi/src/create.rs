@@ -164,12 +164,12 @@ fn determine_protocol(init: &response::Init) -> Result<u32> {
 /// Performs the init handshake for the new thread and adds it to the specified process
 pub fn initialize_thread(process: &mut Process, tid: u64) -> Result<()> {
     let mut request_path_buf = PathBuf::from(&process.root_dir);
-    request_path_buf.push(format!("{:x}", tid));
+    request_path_buf.push(format!("{:016x}", tid));
     request_path_buf.push(REQUEST_FILE_NAME);
     let request_path = request_path_buf.as_path();
 
     let mut response_path_buf = PathBuf::from(&process.root_dir);
-    response_path_buf.push(format!("{:x}", tid));
+    response_path_buf.push(format!("{:016x}", tid));
     response_path_buf.push(RESPONSE_FILE_NAME);
     let response_path = response_path_buf.as_path();
 
@@ -312,7 +312,7 @@ mod sys {
         "LD_PRELOAD"
     }
 
-    pub fn modify_env(env: &mut Vec<(String, String)>) {
+    pub fn modify_env(_env: &mut Vec<(String, String)>) {
     }
 }
 

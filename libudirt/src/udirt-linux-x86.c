@@ -262,9 +262,9 @@ int get_exit_argument(const ucontext_t *context,
         // The exit argument is the first parameter on the stack
 
         // Get the stack pointer
-        unsigned long sp;
+        uint64_t sp;
 
-        sp = (unsigned long)context->uc_mcontext.gregs[X86_ESP_OFFSET];
+        sp = (uint64_t)context->uc_mcontext.gregs[X86_ESP_OFFSET];
 
         int word_length = sizeof(unsigned long);
 
@@ -273,13 +273,12 @@ int get_exit_argument(const ucontext_t *context,
 
         int read_result = read_memory(status, (const void *)sp, sizeof(int), errmsg);
         if ( read_result != 0 ) {
-            udi_printf("failed to retrieve exit status off of the stack at 0x%lx\n",
-                       sp);
-            snprintf(errmsg->msg,
-                     errmsg->size,
-                     "failed to retrieve exit status off of the stack at 0x%lx: %s",
-                     sp,
-                     get_mem_errstr());
+            udi_log("failed to retrieve exit status off of the stack at %a",
+                    sp);
+            udi_set_errmsg(errmsg,
+                           "failed to retrieve exit status off of the stack at %a: %s",
+                           sp,
+                           get_mem_errstr());
             result = RESULT_ERROR;
         }
         result = RESULT_SUCCESS;
@@ -402,7 +401,7 @@ unsigned long get_register_ud_type(ud_type_t reg, const void *context) {
     int offset = get_reg_context_offset(reg);
 
     if ( offset == -1 ) {
-        udi_abort(__FILE__, __LINE__);
+        udi_abort();
     }
 
     return u_context->uc_mcontext.gregs[offset];
@@ -567,7 +566,7 @@ int get_register(udi_register_e reg,
     }
 
     if (offset < -1) {
-        snprintf(errmsg->msg, errmsg->size, "invalid register %d", reg);
+        udi_set_errmsg(errmsg, "invalid register %d", reg);
         return -1;
     }
 
@@ -593,7 +592,7 @@ int set_register(udi_register_e reg,
     }
 
     if (offset < -1) {
-        snprintf(errmsg->msg, errmsg->size, "invalid register %d", reg);
+        udi_set_errmsg(errmsg, "invalid register %d", reg);
         return -1;
     }
 

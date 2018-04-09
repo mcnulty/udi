@@ -12,6 +12,9 @@
 #ifndef _UDI_RT_POSIX_H
 #define _UDI_RT_POSIX_H 1
 
+// This needs to be included first to set feature macros
+#include "udirt-platform.h"
+
 #include <ucontext.h>
 #include <signal.h>
 #include <sys/types.h>
@@ -123,6 +126,7 @@ struct thread_struct {
     int control_thread;
     int suspend_pending;
     int single_step;
+    int stack_event_pending;
     breakpoint *single_step_bp;
     signal_state event_state;
     struct thread_struct *next_thread;

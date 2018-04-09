@@ -32,7 +32,7 @@ int write_breakpoint_instruction(breakpoint *bp, udi_errmsg *errmsg) {
     int result = read_memory(bp->saved_bytes, (void *)(unsigned long)bp->address, 
             sizeof(BREAKPOINT_INSN), errmsg);
     if( result != 0 ) {
-        udi_printf("failed to save original bytes at 0x%"PRIx64"\n",
+        udi_log("failed to save original bytes at %a",
                 bp->address);
         return result;
     }
@@ -40,7 +40,7 @@ int write_breakpoint_instruction(breakpoint *bp, udi_errmsg *errmsg) {
     result = write_memory((void *)(unsigned long)bp->address, &BREAKPOINT_INSN, 
             sizeof(BREAKPOINT_INSN), errmsg);
     if ( result != 0 ) {
-        udi_printf("failed to install breakpoint at 0x%"PRIx64"\n",
+        udi_log("failed to install breakpoint at %a",
                 bp->address);
     }
 
@@ -62,7 +62,7 @@ int write_saved_bytes(breakpoint *bp, udi_errmsg *errmsg) {
             sizeof(BREAKPOINT_INSN), errmsg);
 
     if ( result != 0 ) {
-        udi_printf("failed to remove breakpoint at 0x%"PRIx64"\n", bp->address);
+        udi_log("failed to remove breakpoint at %a", bp->address);
     }
 
     return result;
@@ -285,8 +285,8 @@ uint64_t get_ctf_successor(uint64_t pc, udi_errmsg *errmsg, const void *context)
     ud_set_pc(&ud_obj, pc);
 
     if ( ud_disassemble(&ud_obj) == 0 ) {
-        snprintf(errmsg->msg, errmsg->size, "disassembling instruction at 0x%"PRIx64" failed", pc);
-        udi_printf("%s\n", errmsg->msg);
+        udi_set_errmsg(errmsg, "disassembling instruction at %a failed", pc);
+        udi_log("%s", errmsg->msg);
         return 0;
     }
 
@@ -358,9 +358,10 @@ uint64_t get_ctf_successor(uint64_t pc, udi_errmsg *errmsg, const void *context)
     }
 
     if ( successor == 0 ) {
-        snprintf(errmsg->msg, errmsg->size, "failed to determine ctf successor at 0x%"PRIx64"\n",
-                pc);
-        udi_printf("%s\n", errmsg->msg);
+        udi_set_errmsg(errmsg,
+                       "failed to determine ctf successor at %a",
+                       pc);
+        udi_log("%s", errmsg->msg);
     }
 
     return successor;

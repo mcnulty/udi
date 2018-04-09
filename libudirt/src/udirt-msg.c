@@ -93,6 +93,18 @@ int read_cbor_items(udirt_fd fd,
                            errno);
             break;
         }
+
+        if (udi_debug_on) {
+            uint8_t *dst = buffer + buf_idx;
+            size_t length = buflen - buf_idx;
+
+            udi_log_noprefix("IN ");
+            for (int i = 0; i < length; ++i) {
+                udi_log_noprefix(" %b ", dst[i]);
+            }
+            udi_log_noprefix("\n");
+        }
+
         buf_idx = buflen;
 
         struct cbor_decoder_result decode_result;
@@ -454,8 +466,8 @@ int write_cbor_item(udirt_fd fd,
     }
 
     int result = write_to(fd, buffer, length);
-    udi_free(buffer);
     if (result != 0) {
+        udi_free(buffer);
         udi_set_errmsg(errmsg,
                        "failed to write %s: %e",
                        name,
@@ -463,6 +475,15 @@ int write_cbor_item(udirt_fd fd,
         return RESULT_ERROR;
     }
 
+    if (udi_debug_on) {
+        udi_log_noprefix("OUT ");
+        for (int i = 0; i < length; ++i) {
+            udi_log_noprefix(" %b ", buffer[i]);
+        }
+        udi_log_noprefix("\n");
+    }
+
+    udi_free(buffer);
     return RESULT_SUCCESS;
 }
 

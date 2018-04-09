@@ -7,6 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+// This needs to be included first to set feature macros
 #include "udirt-platform.h"
 
 #include <sys/syscall.h>

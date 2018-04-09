@@ -109,7 +109,7 @@ int locate_wrapper_functions(udi_errmsg *errmsg) {
         real_sigaction = (sigaction_type) dlsym(UDI_RTLD_NEXT, "sigaction");
         errmsg_tmp = dlerror();
         if (errmsg_tmp != NULL) {
-            udi_printf("symbol lookup error: %s\n", errmsg_tmp);
+            udi_log("symbol lookup error: %s", errmsg_tmp);
             strncpy(errmsg->msg, errmsg_tmp, errmsg->size-1);
             errnum = -1;
             break;
@@ -118,7 +118,7 @@ int locate_wrapper_functions(udi_errmsg *errmsg) {
         real_fork = (fork_type) dlsym(UDI_RTLD_NEXT, "fork");
         errmsg_tmp = dlerror();
         if (errmsg_tmp != NULL) {
-            udi_printf("symbol lookup error: %s\n", errmsg_tmp);
+            udi_log("symbol lookup error: %s", errmsg_tmp);
             strncpy(errmsg->msg, errmsg_tmp, errmsg->size-1);
             errnum = -1;
             break;
@@ -127,7 +127,7 @@ int locate_wrapper_functions(udi_errmsg *errmsg) {
         real_execve = (execve_type) dlsym(UDI_RTLD_NEXT, "execve");
         errmsg_tmp = dlerror();
         if (errmsg_tmp != NULL) {
-            udi_printf("symbol lookup error: %s\n", errmsg_tmp);
+            udi_log("symbol lookup error: %s", errmsg_tmp);
             strncpy(errmsg->msg, errmsg_tmp, errmsg->size-1);
             errnum = -1;
             break;
@@ -136,7 +136,7 @@ int locate_wrapper_functions(udi_errmsg *errmsg) {
         real_signal = (signal_type) dlsym(UDI_RTLD_NEXT, "signal");
         errmsg_tmp = dlerror();
         if (errmsg_tmp != NULL) {
-            udi_printf("symbol lookup error: %s\n", errmsg_tmp);
+            udi_log("symbol lookup error: %s", errmsg_tmp);
             strncpy(errmsg->msg, errmsg_tmp, errmsg->size-1);
             errnum = -1;
             break;
@@ -162,7 +162,7 @@ int install_event_breakpoints(udi_errmsg *errmsg) {
         // directly and do not pass through the PLT
         exit_bp = create_breakpoint((uint64_t)exit);
         if ( exit_bp == NULL ) {
-            udi_printf("%s\n", "failed to create exit breakpoint");
+            udi_log("failed to create exit breakpoint");
             errnum = -1;
             break;
         }
@@ -170,7 +170,7 @@ int install_event_breakpoints(udi_errmsg *errmsg) {
         errnum = install_breakpoint(exit_bp, errmsg);
 
         if ( errnum != 0 ) {
-            udi_printf("%s\n", "failed to install exit breakpoint");
+            udi_log("failed to install exit breakpoint");
             errnum = -1;
             break;
         }
@@ -197,11 +197,11 @@ int handle_exit_breakpoint(const ucontext_t *context, udi_errmsg *errmsg) {
         return result;
     }
 
-    udi_printf("exit entered with status %d\n", status);
+    udi_log("exit entered with status %d", status);
     exiting = 1;
     result = handle_exit_event(get_user_thread_id(), status, errmsg);
     if ( result != RESULT_SUCCESS ) {
-        udi_printf("failed to report exit status of %d\n", status);
+        udi_log("failed to report exit status of %d", status);
     }
     return result;
 }
@@ -219,16 +219,16 @@ pid_t fork() {
     }else{
         uint64_t thread_id = get_user_thread_id();
 
-        udi_printf(">>> fork entry for 0x%"PRIx64"/0x%"PRIx64"\n",
-                   get_user_thread_id(),
-                   get_kernel_thread_id());
+        udi_log(">>> fork entry for %a/%a",
+                get_user_thread_id(),
+                get_kernel_thread_id());
 
         // Need to continue waiting until this thread owns the control of the process
         int block_result = 1;
         while (block_result > 0) {
             block_result = block_other_threads();
             if ( block_result == -1 ) {
-                udi_printf("%s\n", "failed to block other threads");
+                udi_log("failed to block other threads");
                 errno = EAGAIN;
                 return -1;
             }
@@ -240,7 +240,7 @@ pid_t fork() {
 
         int result = handle_fork_event(thread_id, child, &errmsg);
         if (result != RESULT_SUCCESS) {
-            udi_printf("failed to report fork event: %s\n", errmsg.msg);
+            udi_log("failed to report fork event: %s", errmsg.msg);
             errno = EAGAIN;
             return -1;
         }
@@ -248,14 +248,14 @@ pid_t fork() {
         thread *thr = NULL;
         result = wait_and_execute_command(&errmsg, &thr);
         if (result == RESULT_ERROR) {
-            udi_printf("failed to execute command after fork: %s\n", errmsg.msg);
+            udi_log("failed to execute command after fork: %s", errmsg.msg);
             errno = EAGAIN;
             return -1;
         }
 
         int release_result = release_other_threads();
         if ( release_result != 0 ) {
-            udi_printf("%s\n", "failed to release other threads");
+            udi_log("failed to release other threads");
             errno = EAGAIN;
             return -1;
         }
@@ -288,7 +288,7 @@ int execve(const char *filename, char *const argv[],
 int sigaction(int signum, const struct sigaction *act,
               struct sigaction *oldact)
 {
-    udi_printf("wrapped call to sigaction for signal %d\n", signum);
+    udi_log("wrapped call to sigaction for signal %d", signum);
 
     // Block signals while doing this to avoid a race where a signal is delivered
     // while validating the arguments
@@ -326,7 +326,7 @@ int sigaction(int signum, const struct sigaction *act,
         }
 
         if ( !found ) {
-            udi_printf("failed to intercept call to sigaction for %d\n", signum);
+            udi_log("failed to intercept call to sigaction for %d", signum);
             return EINVAL;
         }
     }while(0);
@@ -390,12 +390,12 @@ void app_signal_handler(int signum, siginfo_t *siginfo, void *v_context) {
     }
 
     if (app_action == NULL) {
-        udi_printf("Signal %d does not have an app action\n", signum);
+        udi_log("Signal %d does not have an app action", signum);
         return;
     }
 
     if ( (void *)app_action->action.sa_sigaction == (void *)SIG_IGN ) {
-        udi_printf("Signal %d ignored, not passing to application\n", signum);
+        udi_log("Signal %d ignored, not passing to application", signum);
         return;
     }
 
@@ -407,15 +407,13 @@ void app_signal_handler(int signum, siginfo_t *siginfo, void *v_context) {
     sigset_t cur_set;
     if ( setsigmask(SIG_SETMASK, &app_actions->action.sa_mask, &cur_set) != 0 )
     {
-        udi_printf("failed to adjust blocked signals for application handler: %s\n",
-                   strerror(errno));
+        udi_log("failed to adjust blocked signals for application handler: %e", errno);
     }
 
     app_actions->action.sa_sigaction(signum, siginfo, v_context);
 
     if ( setsigmask(SIG_SETMASK, &cur_set, NULL) != 0 ) {
-        udi_printf("failed to reset blocked signals after application handler: %s\n",
-                   strerror(errno));
+        udi_log("failed to reset blocked signals after application handler: %e", errno);
     }
 }
 
@@ -428,7 +426,7 @@ int setup_signal_handlers() {
 
     // Sanity check
     if ( (sizeof(signals) / sizeof(int)) != NUM_SIGNALS ) {
-        udi_printf("%s\n", "ASSERT FAIL: signals array length != NUM_SIGNALS");
+        udi_log("ASSERT FAIL: signals array length != NUM_SIGNALS");
         return -1;
     }
 
@@ -451,7 +449,7 @@ int setup_signal_handlers() {
         int signum = signals[i];
         if (signum != 0) {
             if ( real_sigaction(signum, &default_lib_action, &(app_actions[i].action)) != 0 ) {
-                udi_printf("failed to register handler for %d\n", signals[i]);
+                udi_log("failed to register handler for %d", signals[i]);
                 errnum = errno;
                 break;
             }
@@ -469,8 +467,9 @@ int uninstall_signal_handlers() {
         if ( signals[i] == SIGPIPE && pipe_write_failure ) continue;
 
         if ( real_sigaction(signals[i], &(app_actions[i].action), NULL) != 0 ) {
-            udi_printf("failed to reset signal handler for %d: %s\n",
-                    signals[i], strerror(errno));
+            udi_log("failed to reset signal handler for %d: %e",
+                    signals[i],
+                    errno);
             return errno;
         }
     }

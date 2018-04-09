@@ -9,6 +9,9 @@
 
 // Thread support for pthreads
 
+// This needs to be included first because it sets feature macros
+#include "udirt-platform.h"
+
 #include <inttypes.h>
 #include <unistd.h>
 #include <errno.h>
@@ -86,23 +89,23 @@ int locate_thread_wrapper_functions(udi_errmsg *errmsg) {
         real_pthread_create = (pthread_create_type) dlsym(UDI_RTLD_NEXT, "pthread_create");
         errmsg_tmp = dlerror();
         if (errmsg_tmp != NULL) {
-            udi_printf("symbol lookup error: %s\n", errmsg_tmp);
+            udi_log("symbol lookup error: %s", errmsg_tmp);
             strncpy(errmsg->msg, errmsg_tmp, errmsg->size-1);
             errnum = -1;
             break;
         }
-        udi_printf("real pthread create at 0x%"PRIx64"\n", (uint64_t)real_pthread_create);
+        udi_log("real pthread create at %a", (uint64_t)real_pthread_create);
 
         real_pthread_exit = (pthread_exit_type) dlsym(UDI_RTLD_NEXT, "pthread_exit");
         errmsg_tmp = dlerror();
         if (errmsg_tmp != NULL) {
-            udi_printf("symbol lookup error: %s\n", errmsg_tmp);
+            udi_log("symbol lookup error: %s", errmsg_tmp);
             strncpy(errmsg->msg, errmsg_tmp, errmsg->size-1);
             errnum = -1;
             break;
         }
 
-        udi_printf("real pthread exit at 0x%"PRIx64"\n", (uint64_t)real_pthread_exit);
+        udi_log("real pthread exit at %a", (uint64_t)real_pthread_exit);
     }while(0);
 
     return errnum;
@@ -113,7 +116,7 @@ int init_control_pipe(int *control_pipe) {
 
     if ( get_multithread_capable() ) {
         if ( pipe(control_pipe) != 0 ) {
-            udi_printf("failed to create thread control pipe: %s\n", strerror(errno));
+            udi_log("failed to create thread control pipe: %e", errno);
             return -1;
         }
     } else {
@@ -152,6 +155,7 @@ thread *create_thread_struct(uint64_t tid) {
     new_thr->ts = UDI_TS_RUNNING;
     new_thr->suspend_pending = 0;
     new_thr->control_thread = 0;
+    new_thr->stack_event_pending = 0;
 
     return new_thr;
 }
@@ -240,7 +244,7 @@ int handle_thread_create(uint64_t creator_thr)
 
     do {
         tid = get_user_thread_id();
-        udi_printf("thread create event for 0x%"PRIx64"\n", tid);
+        udi_log("thread create event for %a", tid);
 
         thread *thr = create_thread(tid);
         if (thr == NULL) {
@@ -264,7 +268,7 @@ int handle_thread_create(uint64_t creator_thr)
         }
 
         if ( write(thread_barrier.write_handle, &sentinel, 1) != 1 ) {
-            udi_printf("failed to write trigger to pipe: %s\n", strerror(errno));
+            udi_log("failed to write trigger to pipe: %e", errno);
             result = RESULT_ERROR;
             break;
         }
@@ -276,7 +280,7 @@ int handle_thread_create(uint64_t creator_thr)
                 if (errno == EINTR) {
                     continue;
                 }
-                udi_printf("failed to read control trigger from pipe: %s\n", strerror(errno));
+                udi_log("failed to read control trigger from pipe: %e", errno);
                 result = RESULT_ERROR;
                 break;
             }
@@ -287,14 +291,14 @@ int handle_thread_create(uint64_t creator_thr)
         }
 
         if ( trigger != sentinel ) {
-            udi_abort(__FILE__, __LINE__);
+            udi_abort();
         }
     }while(0);
 
     if ( result != RESULT_SUCCESS ) {
-        udi_printf("failed to report thread create of 0x%"PRIx64": %s\n",
-                   tid,
-                   errmsg.msg);
+        udi_log("failed to report thread create of %a: %s",
+                tid,
+                errmsg.msg);
     }
 
     return result;
@@ -313,7 +317,7 @@ int handle_thread_death() {
     do {
         tid = get_user_thread_id();
 
-        udi_printf("thread death event for 0x%"PRIx64"\n", tid);
+        udi_log("thread death event for %a", tid);
 
         thread *thr = find_thread(tid);
         if (thr == NULL) {
@@ -330,9 +334,9 @@ int handle_thread_death() {
     }while(0);
 
     if ( result != RESULT_SUCCESS ) {
-        udi_printf("failed to report thread death of 0x%"PRIx64": %s\n",
-                   tid,
-                   errmsg.msg);
+        udi_log("failed to report thread death of %a: %s",
+                tid,
+                errmsg.msg);
     }
 
     return result;
@@ -341,23 +345,37 @@ int handle_thread_death() {
 static
 void report_thread_death() {
 
-    udi_printf("thread 0x%"PRIx64" dying\n", get_user_thread_id());
+    // block signals while reporting the thread death
+    sigset_t block_set;
+    sigset_t original_set;
+    sigfillset(&block_set);
+
+    if (setsigmask(SIG_SETMASK, &block_set, &original_set) == -1) {
+        udi_abort();
+    }
+
+    udi_log("thread %a dying", get_user_thread_id());
+
+    thread *thr = get_current_thread();
+    thr->stack_event_pending = 1;
 
     int block_result = block_other_threads();
     if (block_result < 0) {
-        udi_printf("%s\n", "failed to block other threads");
-        udi_abort(__FILE__, __LINE__);
+        udi_log("failed to block other threads");
+        udi_abort();
         return;
     }
 
     if (block_result > 0) {
-        udi_printf("thread 0x%"PRIx64" does not need to report thread death\n",
-                   get_user_thread_id());
+        // the thread should always eventually be the control thread
+        udi_abort();
     } else {
+        thr->stack_event_pending = 0;
+
         int death_result = handle_thread_death();
         if (death_result != RESULT_SUCCESS) {
-            udi_printf("failed to handle thread death\n");
-            udi_abort(__FILE__, __LINE__);
+            udi_log("failed to handle thread death");
+            udi_abort();
             return;
         }
 
@@ -368,12 +386,14 @@ void report_thread_death() {
 
         int request_result = wait_and_execute_command(&errmsg, &request_thr);
         if (request_result == RESULT_ERROR) {
-            udi_printf("failed to handle command after thread death");
-            udi_abort(__FILE__, __LINE__);
+            udi_log("failed to handle command after thread death");
+            udi_abort();
         }
 
         release_other_threads();
     }
+
+    setsigmask(SIG_SETMASK, &original_set, NULL);
 }
 
 void pthread_exit(void *value_ptr)
@@ -399,8 +419,8 @@ void *wrapped_start_routine(void *arg)
         int create_result = handle_thread_create(context->creator_tid);
 
         if (create_result != RESULT_SUCCESS) {
-            udi_printf("failed to handle thread creation\n");
-            udi_abort(__FILE__, __LINE__);
+            udi_log("failed to handle thread creation");
+            udi_abort();
             break;
         }
         ret_value = context->start_routine(context->arg);
@@ -422,20 +442,20 @@ int handshake_with_thread()
 
     unsigned char trigger = 0;
     if ( read(thread_barrier.read_handle, &trigger, 1) != 1 ) {
-        udi_printf("failed to read trigger from pipe: %s\n", strerror(errno));
+        udi_log("failed to read trigger from pipe: %e", errno);
         return RESULT_ERROR;
     }
 
     if ( trigger != sentinel ) {
-        udi_abort(__FILE__, __LINE__);
+        udi_abort();
         return RESULT_ERROR;
     }
 
     thread *request_thr = NULL;
     int result = wait_and_execute_command(&errmsg, &request_thr);
     if (result == RESULT_ERROR) {
-        udi_printf("failed to handle command after thread create");
-        udi_abort(__FILE__, __LINE__);
+        udi_log("failed to handle command after thread create");
+        udi_abort();
     }
 
     release_other_threads();
@@ -448,12 +468,12 @@ int pthread_create(pthread_t *thread,
                    void *(*start_routine)(void *),
                    void *arg)
 {
-    udi_printf("thread 0x%"PRIx64" creating a new thread\n", get_user_thread_id());
+    udi_log("thread %a creating a new thread", get_user_thread_id());
 
     int block_result = block_other_threads();
     if (block_result < 0) {
-        udi_printf("%s\n", "failed to block other threads");
-        udi_abort(__FILE__, __LINE__);
+        udi_log("failed to block other threads");
+        udi_abort();
         return ENOMEM;
     }
 
@@ -564,4 +584,47 @@ thread *get_current_thread() {
 
 thread *create_initial_thread() {
     return create_thread(get_user_thread_id());
+}
+
+static pthread_mutex_t log_lock;
+
+int pthread_mutexattr_init(pthread_mutexattr_t *attr) UDI_WEAK;
+int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type) UDI_WEAK;
+int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) UDI_WEAK;
+int pthread_mutex_lock(pthread_mutex_t *mutex) UDI_WEAK;
+int pthread_mutex_unlock(pthread_mutex_t *mutex) UDI_WEAK;
+
+void init_thread_support() {
+    if ( pthread_mutex_init && pthread_mutexattr_init ) {
+        pthread_mutexattr_t attr;
+        if ( pthread_mutexattr_init(&attr) != 0) {
+            abort();
+        }
+
+        if ( pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE) != 0 ) {
+            abort();
+        }
+
+        if ( pthread_mutex_init(&log_lock, &attr) != 0 ) {
+            abort();
+        }
+    }
+}
+
+void udi_log_lock() {
+    if ( pthread_mutex_lock ) {
+        int lock_result = pthread_mutex_lock(&log_lock);
+        if ( lock_result != 0 ) {
+            abort();
+        }
+    }
+}
+
+void udi_log_unlock() {
+    if ( pthread_mutex_unlock ) {
+        int lock_result = pthread_mutex_unlock(&log_lock);
+        if ( lock_result != 0 ) {
+            abort();
+        }
+    }
 }
