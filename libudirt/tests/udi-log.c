@@ -113,6 +113,8 @@ int main(int argc, char *argv[]) {
 
     udi_debug_on = 1;
 
+    init_thread_support();
+
     test_literal();
     test_integer();
     test_error();
